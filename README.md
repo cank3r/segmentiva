@@ -5,7 +5,7 @@
 Segmentiva is a Shopify-native customer preference and segmentation platform. It helps merchants ask shoppers what they care about, store those declared preferences safely in Shopify, and turn the answers into actionable customer tags and native Shopify segments.
 
 > [!NOTE]
-> Segmentiva is currently in **pre-alpha planning**. The product specification is complete; application scaffolding and implementation have not started yet.
+> Segmentiva is in **early development**. The product specification is complete, and **Phase 0 — the official Shopify app scaffold and clean baseline — is in progress** (see [Local development](#local-development)). Later phases (merchant onboarding, questionnaire builder, customer account extensions, and segment activation) have not started yet.
 
 ## The idea
 
@@ -150,7 +150,7 @@ Segmentiva only reconciles tags using its own `segmentiva:` namespace and never 
 | Shopify platform feasibility | Validated |
 | Technical architecture | Complete |
 | Cursor implementation handoff | Complete |
-| Shopify application scaffold | Not started |
+| Shopify application scaffold | In progress (Phase 0) |
 | Customer account extensions | Not started |
 | Kliquea development-store pilot | Not started |
 | Shopify App Store submission | Future phase |
@@ -190,8 +190,56 @@ It contains:
 6. Complete and verify one phase before starting the next.
 7. Keep each phase in a small, reviewable commit.
 
-> [!WARNING]
-> Do not run `npm install` or `shopify app dev` yet. The official Shopify application scaffold has not been added to this repository. Phase 0 creates that foundation.
+> [!NOTE]
+> The official Shopify app scaffold now exists in this repository (Phase 0). You can install dependencies and run the local checks described in [Local development](#local-development). Running `shopify app dev` additionally requires linking the app to a Shopify app record and a development store, which is still pending.
+
+## Local development
+
+Phase 0 provides a runnable Shopify app baseline. The commands below work from a clean clone.
+
+### Prerequisites
+
+- **Node.js 22.** `.nvmrc` pins `22` and the app enforces `>=22.12 <23`. With nvm, run `nvm use`.
+- **npm** (bundled with Node).
+- **[Shopify CLI](https://shopify.dev/docs/apps/tools/cli).** Needed for `shopify app dev` and app management. Install with `npm install -g @shopify/cli@latest` if `shopify version` is unavailable.
+- **[Shopify AI Toolkit](https://shopify.dev/docs/apps/build/ai-toolkit).** Install in Cursor via `/add-plugin` (search "Shopify") and use it to verify Shopify APIs before implementing them.
+
+### Install and set up
+
+```bash
+npm ci        # install exact locked dependencies
+npm run setup  # generate the Prisma client and apply local SQLite migrations
+```
+
+### Environment variables
+
+During normal development the Shopify CLI injects these automatically when you run `npm run dev`. Copy `.env.example` to `.env` only if you need to run the built server directly. Never commit real secrets, tokens, or customer data.
+
+| Variable | Purpose |
+| --- | --- |
+| `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | App credentials from the Shopify app record |
+| `SHOPIFY_APP_URL` | Public URL (the CLI sets this to the dev tunnel) |
+| `SCOPES` | Admin API scopes, kept in sync with `shopify.app.toml` (`read_customers,write_customers`) |
+
+### Commands
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Run the app locally through the Shopify CLI (`shopify app dev`) |
+| `npm run build` | Production build |
+| `npm start` | Serve the production build |
+| `npm run setup` | Prisma client generation and migrations |
+| `npm run typecheck` | React Router typegen and `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest unit tests |
+
+### Still pending for full Phase 0 sign-off
+
+These steps require Shopify credentials and a store, so they happen outside this repository:
+
+- link the app to its Shopify app record in the Dev Dashboard (`shopify app config link`);
+- run `shopify app dev` against a Shopify development store;
+- validate install and reinstall (OAuth and session handling) inside that development store.
 
 ## Implementation phases
 
