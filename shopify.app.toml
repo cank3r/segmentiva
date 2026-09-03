@@ -3,10 +3,12 @@ client_id = ""
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products"
+# Segmentiva MVP minimum Admin scopes (see SEGMENTIVA_MVP_BUILD_PLAN.md section 11).
+# Keep in sync with the SCOPES entry in .env.example.
+scopes = "read_customers,write_customers"
 
 [webhooks]
-api_version = "2025-10"
+api_version = "2026-07"
 
   # Handled by: /app/routes/webhooks.app.uninstalled.tsx
   [[webhooks.subscriptions]]
