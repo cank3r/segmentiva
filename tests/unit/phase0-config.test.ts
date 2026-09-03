@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { ApiVersion } from "@shopify/shopify-api";
+// Import ApiVersion from the same package the app compiles against
+// (app/shopify.server.ts and .graphqlrc.ts), not the transitive @shopify/shopify-api.
+import { ApiVersion } from "@shopify/shopify-app-react-router/server";
 import { describe, expect, it } from "vitest";
 
 const ROOT = process.cwd();
@@ -69,5 +71,23 @@ describe("Phase 0 Shopify configuration", () => {
     const envScopes = parseScopeList(envMatch![1]);
     const tomlScopes = parseScopeList(tomlString(appToml, "scopes"));
     expect(envScopes).toEqual(tomlScopes);
+  });
+
+  it("records the Prisma migration lock provider matching the schema datasource", () => {
+    const schema = read("prisma/schema.prisma");
+    const lock = read("prisma/migrations/migration_lock.toml");
+
+    const schemaProvider = schema.match(/datasource\s+db\s*{[^}]*?provider\s*=\s*"([^"]+)"/s);
+    const lockProvider = lock.match(/provider\s*=\s*"([^"]+)"/);
+
+    expect(schemaProvider, "datasource provider missing from schema").not.toBeNull();
+    expect(lockProvider, "provider missing from migration_lock.toml").not.toBeNull();
+    expect(lockProvider![1]).toBe(schemaProvider![1]);
+  });
+
+  it("ships no leftover template placeholder copy on the public landing page", () => {
+    const landing = read("app/routes/_index/route.tsx");
+    expect(landing).not.toContain("[your app]");
+    expect(landing).not.toContain("Product feature");
   });
 });
