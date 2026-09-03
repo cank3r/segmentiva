@@ -81,9 +81,11 @@ module.exports = {
       files: [
         ".eslintrc.cjs",
         "vite.config.{js,ts}",
+        "vitest.config.{js,ts}",
         ".graphqlrc.{js,ts}",
         "shopify.server.{js,ts}",
         "**/*.server.{js,ts}",
+        "tests/**/*.{js,ts,tsx}",
       ],
       env: {
         node: true,
