@@ -1,0 +1,34 @@
+import { afterAll, describe, expect, it } from "vitest";
+
+import { ShopLifecycleService } from "../../app/services/shop/lifecycle";
+import { createMigratedTestDatabase } from "../helpers/test-db";
+
+describe("clean database migrations", () => {
+  it("applies Prisma migrations to an empty SQLite database and can insert a Shop", async () => {
+    const { prisma, databaseUrl } = createMigratedTestDatabase();
+    expect(databaseUrl.startsWith("file:")).toBe(true);
+
+    const lifecycle = new ShopLifecycleService(prisma);
+    const shop = await lifecycle.ensureInstalled({
+      shopDomain: "fresh-shop.myshopify.com",
+    });
+
+    expect(shop.installationState).toBe("INSTALLED");
+    expect(shop.shopDomain).toBe("fresh-shop.myshopify.com");
+    expect(shop).not.toHaveProperty("accessToken");
+
+    const tables = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+      `SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`,
+    );
+    const names = tables.map((table) => table.name);
+    expect(names).toContain("Shop");
+    expect(names).toContain("Session");
+    expect(names).toContain("ProcessedWebhook");
+
+    await prisma.$disconnect();
+  });
+
+  afterAll(() => {
+    // Temporary sqlite files live in os.tmpdir() and are not committed.
+  });
+});
