@@ -5,30 +5,65 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
+// Local development keeps the official template SQLite database.
+// Field types are portable so shared environments can switch the provider
+// to PostgreSQL without rewriting the Shop/Session models.
+// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string
 datasource db {
   provider = "sqlite"
-  url      = "file:dev.sqlite"
+  url      = env("DATABASE_URL")
 }
 
+// Official Shopify session storage model. Do not duplicate access tokens on Shop.
+// Required by @shopify/shopify-app-session-storage-prisma.
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+}
+
+enum ShopInstallationState {
+  INSTALLED
+  UNINSTALLED
+}
+
+model Shop {
+  id                       String                 @id @default(cuid())
+  shopDomain               String                 @unique
+  installationState        ShopInstallationState
+  installedAt              DateTime
+  uninstalledAt            DateTime?
+  // Prisma Json is TEXT on local SQLite and JSONB on PostgreSQL.
+  settings                 Json                   @default("{}")
+  publishedQuestionnaireId String?
+  publishedVersion         Int?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+}
+
+// Idempotency key for HMAC-verified Shopify webhook deliveries.
+// Stores only shop domain, topic, and webhook id — never the payload.
+model ProcessedWebhook {
+  id          String   @id @default(cuid())
+  shopDomain  String
+  topic       String
+  webhookId   String
+  processedAt DateTime @default(now())
+
+  @@unique([shopDomain, webhookId])
+  @@index([shopDomain])
 }
