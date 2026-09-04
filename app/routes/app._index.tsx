@@ -15,7 +15,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = verifiedShopFromSession(session);
   const lifecycle = new ShopLifecycleService(db);
-  const record = await lifecycle.ensureInstalled(shop);
+  const record = await lifecycle.loadOrCreateWithoutReinstall(shop);
 
   return {
     overview: buildOverviewSnapshot(

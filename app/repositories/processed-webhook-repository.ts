@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import type { VerifiedShopContext } from "../tenancy/verified-shop";
+import { isPrismaUniqueConstraintError } from "./prisma-errors";
 
 export class ProcessedWebhookRepository {
   constructor(private readonly db: PrismaClient) {}
@@ -23,12 +24,7 @@ export class ProcessedWebhookRepository {
       });
       return true;
     } catch (error) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "P2002"
-      ) {
+      if (isPrismaUniqueConstraintError(error)) {
         return false;
       }
       throw error;

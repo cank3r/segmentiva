@@ -7,6 +7,7 @@ import { Form, useActionData, useLoaderData, useNavigation } from "react-router"
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import db from "../db.server";
+import { ShopRepository } from "../repositories/shop-repository";
 import { KLIQUEA_PILOT_PACK_ID } from "../services/pilot-seed/kliquea-pilot";
 import { PilotSeedService } from "../services/pilot-seed/import";
 import {
@@ -48,7 +49,7 @@ export const loader = async ({
   const { session } = await authenticate.admin(request);
   const shop = verifiedShopFromSession(session);
   const lifecycle = new ShopLifecycleService(db);
-  const record = await lifecycle.ensureInstalled(shop);
+  const record = await lifecycle.loadOrCreateWithoutReinstall(shop);
   const settings = parseShopSettings(record.settings);
 
   return {
@@ -78,7 +79,8 @@ export const action = async ({
   const { session, admin } = await authenticate.admin(request);
   const shop = verifiedShopFromSession(session);
   const lifecycle = new ShopLifecycleService(db);
-  const record = await lifecycle.ensureInstalled(shop);
+  const record = await lifecycle.loadOrCreateWithoutReinstall(shop);
+  const shops = new ShopRepository(db);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
@@ -88,6 +90,14 @@ export const action = async ({
       admin,
       grantedScopes: parseGrantedScopes(session.scope),
       processable: lifecycle.canProcess(record),
+    });
+    const currentSettings = parseShopSettings(record.settings);
+    await shops.replaceSettings(shop, {
+      ...currentSettings,
+      lastDiagnostic: {
+        status: diagnostic.status,
+        ranAt: new Date().toISOString(),
+      },
     });
     return { diagnostic };
   }

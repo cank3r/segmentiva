@@ -36,7 +36,7 @@ describe("shop diagnostic redaction", () => {
                   name: "Synthetic Shop A",
                   myshopifyDomain: "shop-a.myshopify.com",
                   plan: {
-                    displayName: "Development",
+                    publicDisplayName: "Development",
                     partnerDevelopment: true,
                   },
                 },
@@ -70,6 +70,37 @@ describe("shop diagnostic redaction", () => {
 
     expect(called).toBe(false);
     expect(result.status).toBe("stopped");
+    expect(containsSensitiveKeys(result)).toBe(false);
+  });
+
+  it("reports an identity mismatch without leaking GraphQL errors", async () => {
+    const result = await runShopDiagnostic({
+      shop: { shopDomain: "shop-a.myshopify.com" },
+      grantedScopes: ["read_customers"],
+      processable: true,
+      admin: {
+        graphql: async () =>
+          new Response(
+            JSON.stringify({
+              data: {
+                shop: {
+                  name: "Other Shop",
+                  myshopifyDomain: "shop-b.myshopify.com",
+                  plan: {
+                    publicDisplayName: "Development",
+                    partnerDevelopment: true,
+                  },
+                },
+              },
+            }),
+            { status: 200 },
+          ),
+      },
+    });
+
+    expect(result.status).toBe("error");
+    expect(result.identityMatchesSession).toBe(false);
+    expect(result.verifiedShopDomain).toBe("shop-a.myshopify.com");
     expect(containsSensitiveKeys(result)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient, Shop, ShopInstallationState } from "@prisma/
 
 import type { VerifiedShopContext } from "../tenancy/verified-shop";
 import { parseShopSettings, type ShopSettings } from "../services/shop/settings";
+import { isPrismaUniqueConstraintError } from "./prisma-errors";
 
 export type ShopRecord = Shop;
 
@@ -43,15 +44,22 @@ export class ShopRepository {
     const existing = await this.findByVerifiedShop(shop);
 
     if (!existing) {
-      return this.db.shop.create({
-        data: {
-          shopDomain: shop.shopDomain,
-          installationState: "INSTALLED",
-          installedAt: now,
-          uninstalledAt: null,
-          settings: {},
-        },
-      });
+      try {
+        return await this.db.shop.create({
+          data: {
+            shopDomain: shop.shopDomain,
+            installationState: "INSTALLED",
+            installedAt: now,
+            uninstalledAt: null,
+            settings: {},
+          },
+        });
+      } catch (error) {
+        if (isPrismaUniqueConstraintError(error)) {
+          return this.getByVerifiedShop(shop);
+        }
+        throw error;
+      }
     }
 
     if (existing.installationState === "INSTALLED") {
@@ -73,15 +81,22 @@ export class ShopRepository {
     const existing = await this.findByVerifiedShop(shop);
 
     if (!existing) {
-      return this.db.shop.create({
-        data: {
-          shopDomain: shop.shopDomain,
-          installationState: "UNINSTALLED",
-          installedAt: now,
-          uninstalledAt: now,
-          settings: {},
-        },
-      });
+      try {
+        return await this.db.shop.create({
+          data: {
+            shopDomain: shop.shopDomain,
+            installationState: "UNINSTALLED",
+            installedAt: now,
+            uninstalledAt: now,
+            settings: {},
+          },
+        });
+      } catch (error) {
+        if (isPrismaUniqueConstraintError(error)) {
+          return this.getByVerifiedShop(shop);
+        }
+        throw error;
+      }
     }
 
     if (existing.installationState === "UNINSTALLED") {
@@ -95,6 +110,35 @@ export class ShopRepository {
         uninstalledAt: now,
       },
     });
+  }
+
+  /**
+   * Create an INSTALLED row only when none exists. Never revives UNINSTALLED.
+   * Used by authenticated Admin loaders so leftover sessions cannot undo uninstall.
+   */
+  async createInstalledIfAbsent(shop: VerifiedShopContext): Promise<ShopRecord> {
+    const existing = await this.findByVerifiedShop(shop);
+    if (existing) {
+      return existing;
+    }
+
+    const now = new Date();
+    try {
+      return await this.db.shop.create({
+        data: {
+          shopDomain: shop.shopDomain,
+          installationState: "INSTALLED",
+          installedAt: now,
+          uninstalledAt: null,
+          settings: {},
+        },
+      });
+    } catch (error) {
+      if (isPrismaUniqueConstraintError(error)) {
+        return this.getByVerifiedShop(shop);
+      }
+      throw error;
+    }
   }
 
   async replaceSettings(

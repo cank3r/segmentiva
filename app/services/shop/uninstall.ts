@@ -31,13 +31,21 @@ export class UninstallService {
     const claimed = await this.webhooks.claim(shop, webhook);
     const existing = await this.lifecycle.load(shop);
 
+    if (!claimed) {
+      return {
+        alreadyProcessed: true,
+        processingStopped: !this.lifecycle.canProcess(existing),
+        ignoredAsStale: false,
+      };
+    }
+
     if (
       existing?.installationState === "INSTALLED" &&
       webhook.triggeredAt &&
       isStaleUninstall(webhook.triggeredAt, existing.installedAt)
     ) {
       return {
-        alreadyProcessed: !claimed,
+        alreadyProcessed: false,
         processingStopped: false,
         ignoredAsStale: true,
       };
@@ -47,7 +55,7 @@ export class UninstallService {
     await this.db.session.deleteMany({ where: { shop: shop.shopDomain } });
 
     return {
-      alreadyProcessed: !claimed,
+      alreadyProcessed: false,
       processingStopped: true,
       ignoredAsStale: false,
     };

@@ -38,10 +38,16 @@ export type PilotSeedRecord = {
   definition: PilotQuestionnaireDefinition;
 };
 
+export type LastDiagnosticRecord = {
+  status: "ok" | "error" | "stopped";
+  ranAt: string;
+};
+
 export type ShopSettings = {
   defaultLocale?: "en" | "es";
   accountCompatibility?: "new_customer_accounts";
   pilotSeed?: PilotSeedRecord;
+  lastDiagnostic?: LastDiagnosticRecord;
 };
 
 export function parseShopSettings(value: unknown): ShopSettings {
@@ -64,6 +70,21 @@ export function parseShopSettings(value: unknown): ShopSettings {
     const seed = record.pilotSeed as PilotSeedRecord;
     if (seed.packId === "kliquea-pilot" && typeof seed.importedAt === "string") {
       settings.pilotSeed = seed;
+    }
+  }
+
+  if (record.lastDiagnostic && typeof record.lastDiagnostic === "object") {
+    const diagnostic = record.lastDiagnostic as LastDiagnosticRecord;
+    if (
+      (diagnostic.status === "ok" ||
+        diagnostic.status === "error" ||
+        diagnostic.status === "stopped") &&
+      typeof diagnostic.ranAt === "string"
+    ) {
+      settings.lastDiagnostic = {
+        status: diagnostic.status,
+        ranAt: diagnostic.ranAt,
+      };
     }
   }
 

@@ -24,6 +24,12 @@ export class ShopLifecycleService {
     return this.shops.upsertInstalled(shop);
   }
 
+  async loadOrCreateWithoutReinstall(
+    shop: VerifiedShopContext,
+  ): Promise<ShopRecord> {
+    return this.shops.createInstalledIfAbsent(shop);
+  }
+
   async markUninstalled(shop: VerifiedShopContext): Promise<ShopRecord> {
     return this.shops.markUninstalled(shop);
   }

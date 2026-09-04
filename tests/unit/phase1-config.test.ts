@@ -30,6 +30,22 @@ describe("Phase 1 configuration guards", () => {
     expect(shopifyServer).not.toContain("kliquea-pilot");
   });
 
+  it("keeps Admin loaders from reinstalling an uninstalled shop", () => {
+    const overview = read("app/routes/app._index.tsx");
+    const settings = read("app/routes/app.settings.tsx");
+    expect(overview).toContain("loadOrCreateWithoutReinstall");
+    expect(settings).toContain("loadOrCreateWithoutReinstall");
+    expect(overview).not.toContain("ensureInstalled");
+    expect(settings).not.toContain("ensureInstalled");
+  });
+
+  it("uses the current ShopPlan publicDisplayName field in the diagnostic query", () => {
+    const diagnostics = read("app/services/shop/diagnostics.ts");
+    expect(diagnostics).toContain("publicDisplayName");
+    expect(diagnostics).not.toContain("plan.displayName");
+    expect(diagnostics).not.toMatch(/plan \{\s*displayName/);
+  });
+
   it("does not hard-code a Kliquea shop domain or production host", () => {
     const pack = read("app/services/pilot-seed/kliquea-pilot.ts");
     const importer = read("app/services/pilot-seed/import.ts");

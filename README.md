@@ -240,7 +240,7 @@ During normal development the Shopify CLI injects Shopify credentials automatica
 
 ### Pilot questionnaire seed
 
-The pilot pack is merchant configuration, not a store identity. It never runs on install and is not bound to a Kliquea domain.
+The pilot pack is merchant configuration, not a store identity. It never runs on install and is not bound to a Kliquea domain. The CLI is an operator action against the application database; it does not use a Shopify Admin session. Prefer the Settings confirmation form for a merchant-authenticated import.
 
 ```bash
 npm run seed:pilot -- --shop=example.myshopify.com --pack=kliquea-pilot --confirm

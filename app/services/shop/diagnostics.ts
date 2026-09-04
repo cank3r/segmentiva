@@ -15,7 +15,7 @@ const SHOP_DIAGNOSTIC_QUERY = `#graphql
       name
       myshopifyDomain
       plan {
-        displayName
+        publicDisplayName
         partnerDevelopment
       }
     }
@@ -27,7 +27,7 @@ type ShopDiagnosticGraphql = {
     name: string;
     myshopifyDomain: string;
     plan: {
-      displayName: string;
+      publicDisplayName: string;
       partnerDevelopment: boolean;
     };
   };
@@ -130,7 +130,7 @@ export async function runShopDiagnostic(input: {
       verifiedShopDomain: input.shop.shopDomain,
       shopName: data.shop.name,
       myshopifyDomain,
-      planDisplayName: data.shop.plan.displayName,
+      planDisplayName: data.shop.plan.publicDisplayName,
       partnerDevelopment: data.shop.plan.partnerDevelopment,
       grantedScopes: input.grantedScopes,
       requestedScopes: requestedScopesFromEnv(),

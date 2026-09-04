@@ -49,10 +49,18 @@ export function buildOverviewSnapshot(
     {
       id: "diagnostic",
       label: "Confirm shop connection",
-      status: processingEnabled ? "pending" : "blocked",
-      detail: processingEnabled
-        ? "Run the harmless Admin API diagnostic from Settings."
-        : "Processing is stopped until the app is installed.",
+      status:
+        settings.lastDiagnostic?.status === "ok"
+          ? "complete"
+          : processingEnabled
+            ? "pending"
+            : "blocked",
+      detail:
+        settings.lastDiagnostic?.status === "ok"
+          ? "Harmless Admin API diagnostic succeeded for the verified shop."
+          : processingEnabled
+            ? "Run the harmless Admin API diagnostic from Settings."
+            : "Processing is stopped until the app is installed.",
     },
     {
       id: "pilot-seed",
