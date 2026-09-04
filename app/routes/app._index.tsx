@@ -1,49 +1,122 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import db from "../db.server";
+import {
+  buildOverviewSnapshot,
+  type ChecklistItemStatus,
+} from "../services/shop/overview";
+import { ShopLifecycleService } from "../services/shop/lifecycle";
 import { authenticate } from "../shopify.server";
+import { verifiedShopFromSession } from "../tenancy/verified-shop";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shop = verifiedShopFromSession(session);
+  const lifecycle = new ShopLifecycleService(db);
+  const record = await lifecycle.ensureInstalled(shop);
 
-  return null;
+  return {
+    overview: buildOverviewSnapshot(
+      shop.shopDomain,
+      record,
+      lifecycle.canProcess(record),
+    ),
+  };
 };
 
-export default function Index() {
+function statusTone(
+  status: ChecklistItemStatus,
+): "success" | "warning" | "info" {
+  switch (status) {
+    case "complete":
+      return "success";
+    case "blocked":
+      return "warning";
+    default:
+      return "info";
+  }
+}
+
+function statusLabel(status: ChecklistItemStatus): string {
+  switch (status) {
+    case "complete":
+      return "Complete";
+    case "blocked":
+      return "Blocked";
+    case "later":
+      return "Later phase";
+    default:
+      return "Pending";
+  }
+}
+
+export default function Overview() {
+  const { overview } = useLoaderData<typeof loader>();
+
   return (
-    <s-page heading="Segmentiva">
-      <s-section heading="Turn customer data into personalized shopping">
+    <s-page heading="Overview">
+      {!overview.processingEnabled ? (
+        <s-banner tone="critical" heading="Processing stopped">
+          Segmentiva is uninstalled for this shop. Application processing is
+          stopped until the app is installed again. Merchant configuration is
+          kept so a reinstall can reuse it.
+        </s-banner>
+      ) : null}
+
+      <s-section heading="Installation">
         <s-paragraph>
-          This is the Phase 0 baseline of Segmentiva, a Shopify-native customer
-          preference and segmentation app. The official app scaffold,
-          authentication, session storage, and embedded Admin shell are in
-          place. Merchant onboarding, the questionnaire builder, customer
-          account extensions, and segment activation arrive in later phases.
+          Current shop: {overview.shopDomain}
+        </s-paragraph>
+        <s-paragraph>
+          Installation state: {overview.installationState}
+        </s-paragraph>
+        <s-paragraph>
+          Processing: {overview.processingEnabled ? "enabled" : "stopped"}
         </s-paragraph>
       </s-section>
 
-      <s-section slot="aside" heading="Baseline">
+      <s-section heading="Setup checklist">
+        <s-unordered-list>
+          {overview.checklist.map((item) => (
+            <s-list-item key={item.id}>
+              <s-stack direction="inline" gap="base">
+                <s-badge tone={statusTone(item.status)}>
+                  {statusLabel(item.status)}
+                </s-badge>
+                <s-text>
+                  {item.label}. {item.detail}
+                </s-text>
+              </s-stack>
+            </s-list-item>
+          ))}
+        </s-unordered-list>
+      </s-section>
+
+      <s-section heading="Status">
         <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
-          </s-link>
+          Questionnaire: {overview.questionnaireStatus.replaceAll("_", " ")}
         </s-paragraph>
         <s-paragraph>
-          <s-text>Shopify Admin API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL 2026-07
-          </s-link>
+          Customer account extensions: not started. Preferences are collected
+          after the customer&apos;s first authenticated account access, not
+          inside Shopify&apos;s native sign-in form.
         </s-paragraph>
         <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.prisma.io/" target="_blank">
-            Prisma
-          </s-link>
+          Completed profiles: {overview.completedProfiles}
         </s-paragraph>
+        <s-paragraph>
+          Last synchronization errors: {overview.lastSyncErrorCount}
+        </s-paragraph>
+      </s-section>
+
+      <s-section slot="aside" heading="Next step">
+        <s-paragraph>
+          Confirm the authenticated shop from Settings, then import the
+          optional pilot questionnaire only if you intend to seed this shop.
+        </s-paragraph>
+        <s-link href="/app/settings">Open settings</s-link>
       </s-section>
     </s-page>
   );

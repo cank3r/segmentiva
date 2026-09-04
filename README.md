@@ -5,7 +5,7 @@
 Segmentiva is a Shopify-native customer preference and segmentation platform. It helps merchants ask shoppers what they care about, store those declared preferences safely in Shopify, and turn the answers into actionable customer tags and native Shopify segments.
 
 > [!NOTE]
-> Segmentiva is in **early development**. The product specification is complete, and **Phase 0 — the official Shopify app scaffold and clean baseline — is in progress** (see [Local development](#local-development)). Later phases (merchant onboarding, questionnaire builder, customer account extensions, and segment activation) have not started yet.
+> Segmentiva is in **early development**. **Phase 0** (official Shopify app scaffold) is complete. **Phase 1** (tenant model, installation lifecycle, overview checklist, settings diagnostics, and explicit pilot seed) is in progress. Questionnaire builder, customer account extensions, and segment activation have not started yet.
 
 ## The idea
 
@@ -150,7 +150,8 @@ Segmentiva only reconciles tags using its own `segmentiva:` namespace and never 
 | Shopify platform feasibility | Validated |
 | Technical architecture | Complete |
 | Cursor implementation handoff | Complete |
-| Shopify application scaffold | In progress (Phase 0) |
+| Shopify application scaffold | Complete (Phase 0) |
+| Tenant model and merchant onboarding | In progress (Phase 1) |
 | Customer account extensions | Not started |
 | Kliquea development-store pilot | Not started |
 | Shopify App Store submission | Future phase |
@@ -191,11 +192,11 @@ It contains:
 7. Keep each phase in a small, reviewable commit.
 
 > [!NOTE]
-> The official Shopify app scaffold now exists in this repository (Phase 0). You can install dependencies and run the local checks described in [Local development](#local-development). Running `shopify app dev` additionally requires linking the app to a Shopify app record and a development store, which is still pending.
+> Phase 0 is complete in this repository. Phase 1 adds tenant onboarding on top of that baseline. Running `shopify app dev` still requires linking the app to a Shopify app record and a development store.
 
 ## Local development
 
-Phase 0 provides a runnable Shopify app baseline. The commands below work from a clean clone.
+Phase 0 provides a runnable Shopify app baseline. Phase 1 adds the shop tenant model, install/uninstall lifecycle, overview checklist, settings diagnostics, and an explicit pilot-questionnaire seed. The commands below work from a clean clone.
 
 ### Prerequisites
 
@@ -211,15 +212,18 @@ npm ci        # install exact locked dependencies
 npm run setup  # generate the Prisma client and apply local SQLite migrations
 ```
 
+`npm run setup` defaults `DATABASE_URL` to `file:dev.sqlite` when the variable is unset. Shared environments should set a PostgreSQL `DATABASE_URL` explicitly. Do not switch the Prisma provider in this repository until the production database is provisioned.
+
 ### Environment variables
 
-During normal development the Shopify CLI injects these automatically when you run `npm run dev`. Copy `.env.example` to `.env` only if you need to run the built server directly. Never commit real secrets, tokens, or customer data.
+During normal development the Shopify CLI injects Shopify credentials automatically when you run `npm run dev`. Copy `.env.example` to `.env` only if you need to run the built server directly. Never commit real secrets, tokens, or customer data.
 
 | Variable | Purpose |
 | --- | --- |
 | `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | App credentials from the Shopify app record |
 | `SHOPIFY_APP_URL` | Public URL (the CLI sets this to the dev tunnel) |
 | `SCOPES` | Admin API scopes, kept in sync with `shopify.app.toml` (`read_customers,write_customers`) |
+| `DATABASE_URL` | Local SQLite `file:dev.sqlite`, or PostgreSQL in shared environments |
 
 ### Commands
 
@@ -229,17 +233,30 @@ During normal development the Shopify CLI injects these automatically when you r
 | `npm run build` | Production build |
 | `npm start` | Serve the production build |
 | `npm run setup` | Prisma client generation and migrations |
+| `npm run seed:pilot` | Explicitly import the Kliquea pilot questionnaire for one shop |
 | `npm run typecheck` | React Router typegen and `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest unit tests |
+| `npm test` | Vitest unit and integration tests |
 
-### Still pending for full Phase 0 sign-off
+### Pilot questionnaire seed
+
+The pilot pack is merchant configuration, not a store identity. It never runs on install and is not bound to a Kliquea domain.
+
+```bash
+npm run seed:pilot -- --shop=example.myshopify.com --pack=kliquea-pilot --confirm
+```
+
+Without `--shop`, `--pack`, and `--confirm`, the command refuses to run. The same import is available from Settings after an explicit checkbox confirmation for the currently authenticated shop. Reimporting an already-imported pack is idempotent.
+
+### Still pending for Shopify store validation
 
 These steps require Shopify credentials and a store, so they happen outside this repository:
 
 - link the app to its Shopify app record in the Dev Dashboard (`shopify app config link`);
 - run `shopify app dev` against a Shopify development store;
-- validate install and reinstall (OAuth and session handling) inside that development store.
+- install, uninstall, and reinstall inside that development store;
+- run the Settings diagnostic against the authenticated shop;
+- import the pilot pack for a development shop only (never a production domain).
 
 ## Implementation phases
 
