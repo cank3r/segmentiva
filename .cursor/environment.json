@@ -1,0 +1,4 @@
+{
+  "name": "Segmentiva",
+  "install": "npm ci && npm run setup"
+}
