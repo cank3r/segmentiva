@@ -169,7 +169,7 @@ export async function runShopDiagnostic(input: {
       identityMatchesSession: true,
       throttled,
       graphqlErrorCodes: [],
-      message: "Authenticated Admin API read succeeded for the verified shop.",
+      message: "Shop connection check succeeded for the verified shop.",
     };
     assertPublicDiagnostic(result);
     return result;

@@ -32,15 +32,13 @@ export default function Settings() {
   const submitting = navigation.state !== "idle";
   const submittingIntent =
     navigation.formData?.get("intent")?.toString() ?? "";
-  const [importConfirmed, setImportConfirmed] = useState(false);
-  const [resetConfirmed, setResetConfirmed] = useState(false);
 
   return (
     <s-page heading="Settings">
       {!data.processingEnabled ? (
         <s-banner tone="critical" heading="Processing stopped">
-          This shop is uninstalled. Diagnostics that need the Admin API are
-          unavailable until Segmentiva is installed again.
+          This shop is uninstalled. Connection checks are unavailable until
+          Segmentiva is installed again.
         </s-banner>
       ) : null}
 
@@ -121,7 +119,7 @@ export default function Settings() {
               Shop name: {actionData.diagnostic.shopName ?? "Unavailable"}
             </s-paragraph>
             <s-paragraph>
-              myshopify domain:{" "}
+              Shopify domain:{" "}
               {actionData.diagnostic.myshopifyDomain ?? "Unavailable"}
             </s-paragraph>
             <s-paragraph>
@@ -159,62 +157,66 @@ export default function Settings() {
         <s-paragraph>
           Current import: {data.pilotImported ? "Imported for this shop" : "Not imported"}
         </s-paragraph>
-        <Form method="post">
-          <input type="hidden" name="intent" value="import_pilot" />
-          <s-stack direction="block" gap="base">
-            <s-checkbox
-              name="confirm"
-              value="yes"
-              checked={importConfirmed}
-              onChange={(event) => {
-                const target = event.currentTarget as unknown as {
-                  checked?: boolean;
-                };
-                setImportConfirmed(Boolean(target.checked));
-              }}
-              label="I want to import the pilot questionnaire for this shop only."
-            />
-            <s-button
-              type="submit"
-              disabled={
-                submitting || !data.processingEnabled || !importConfirmed
-              }
-              loading={submitting && submittingIntent === "import_pilot"}
-            >
-              Import pilot questionnaire
-            </s-button>
-          </s-stack>
-        </Form>
+        <PilotConfirmForm
+          key={data.pilotImported ? "import-applied" : "import-empty"}
+          intent="import_pilot"
+          checkboxLabel="I want to import the pilot questionnaire for this shop only."
+          buttonLabel="Import pilot questionnaire"
+          disabled={submitting || !data.processingEnabled}
+          loading={submitting && submittingIntent === "import_pilot"}
+        />
         {data.pilotImported ? (
-          <Form method="post">
-            <input type="hidden" name="intent" value="reset_pilot" />
-            <s-stack direction="block" gap="base">
-              <s-checkbox
-                name="confirm"
-                value="yes"
-                checked={resetConfirmed}
-                onChange={(event) => {
-                  const target = event.currentTarget as unknown as {
-                    checked?: boolean;
-                  };
-                  setResetConfirmed(Boolean(target.checked));
-                }}
-                label="I want to clear the pilot questionnaire import for this shop."
-              />
-              <s-button
-                type="submit"
-                disabled={
-                  submitting || !data.processingEnabled || !resetConfirmed
-                }
-                loading={submitting && submittingIntent === "reset_pilot"}
-              >
-                Clear pilot import
-              </s-button>
-            </s-stack>
-          </Form>
+          <PilotConfirmForm
+            key="reset-applied"
+            intent="reset_pilot"
+            checkboxLabel="I want to clear the pilot questionnaire import for this shop."
+            buttonLabel="Clear pilot import"
+            tone="critical"
+            disabled={submitting || !data.processingEnabled}
+            loading={submitting && submittingIntent === "reset_pilot"}
+          />
         ) : null}
       </s-section>
     </s-page>
+  );
+}
+
+function PilotConfirmForm(props: {
+  intent: "import_pilot" | "reset_pilot";
+  checkboxLabel: string;
+  buttonLabel: string;
+  disabled: boolean;
+  loading: boolean;
+  tone?: "critical";
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+
+  return (
+    <Form method="post">
+      <input type="hidden" name="intent" value={props.intent} />
+      <s-stack direction="block" gap="base">
+        <s-checkbox
+          name="confirm"
+          value="yes"
+          checked={confirmed}
+          onChange={(event) => {
+            const target = event.currentTarget as unknown as {
+              checked?: boolean;
+            };
+            setConfirmed(Boolean(target.checked));
+          }}
+          label={props.checkboxLabel}
+        />
+        <s-button
+          type="submit"
+          tone={props.tone}
+          disabled={props.disabled || !confirmed}
+          loading={props.loading}
+        >
+          {props.buttonLabel}
+        </s-button>
+      </s-stack>
+    </Form>
   );
 }
 

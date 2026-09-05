@@ -8,12 +8,12 @@ const KNOWN_SCOPES: Record<string, Omit<ScopeCapability, "scope">> = {
   read_customers: {
     label: "Read customers",
     impact:
-      "Segmentiva cannot read customer records needed for later preference and tag work.",
+      "Segmentiva cannot read the customer records needed to save preferences.",
   },
   write_customers: {
     label: "Write customers",
     impact:
-      "Segmentiva cannot write Segmentiva-owned customer tags in a later phase.",
+      "Segmentiva cannot save customer preference tags until this permission is granted.",
   },
 };
 
@@ -34,6 +34,10 @@ export function parseGrantedScopes(scope: string | null | undefined): string[] {
     .map((entry) => entry.trim())
     .filter(Boolean)
     .sort();
+}
+
+export function labelsForScopes(scopes: string[]): string[] {
+  return scopes.map((scope) => KNOWN_SCOPES[scope]?.label ?? scope);
 }
 
 export function requestedScopesFromEnv(): string[] {

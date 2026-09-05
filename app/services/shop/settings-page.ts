@@ -10,7 +10,7 @@ import {
 } from "./diagnostics";
 import { ShopLifecycleService } from "./lifecycle";
 import { toPublicSettingsError } from "./public-errors";
-import { compareRequestedAndGrantedScopes } from "./scopes";
+import { compareRequestedAndGrantedScopes, labelsForScopes } from "./scopes";
 import { settingsFromShopRecord } from "./settings";
 import type { AdminGraphqlClient } from "../shopify/admin-graphql";
 import { verifiedShopFromSession } from "../../tenancy/verified-shop";
@@ -62,8 +62,8 @@ export async function loadSettingsPageData(
       record.installationState === "INSTALLED" ? "Installed" : "Uninstalled",
     processingEnabled: lifecycle.canProcess(record),
     apiVersion: ApiVersion.July26,
-    grantedScopes,
-    requestedScopes,
+    grantedScopes: labelsForScopes(grantedScopes),
+    requestedScopes: labelsForScopes(requestedScopes),
     missingScopes: comparison.missing,
     reauthorizeAction: comparison.reauthorizeAction,
     accountCompatibility: "New customer accounts (classic accounts unsupported)",
@@ -74,7 +74,7 @@ export async function loadSettingsPageData(
       { topic: "App uninstall", status: "Active" },
     ],
     retentionSummary:
-      "Uninstall stops processing and deletes Shopify sessions for this shop. Merchant configuration is retained until the later shop/redact compliance workflow.",
+      "Uninstall stops processing and deletes Shopify sessions for this shop. Merchant configuration is kept so a reinstall can reuse it.",
     pilotImported: settings.pilotSeed?.status === "applied",
   };
 }

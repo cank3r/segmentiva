@@ -100,10 +100,10 @@ export function backoffWithJitterMs(
 
 function publicMessageFor(codes: string[]): string {
   if (codes.includes("THROTTLED")) {
-    return "Shopify is temporarily rate-limiting Admin API reads. Try the diagnostic again shortly.";
+    return "Shopify is temporarily slowing connection checks. Try again shortly.";
   }
   if (codes.includes("ACCESS_DENIED")) {
-    return "Shopify denied this Admin API read. Check that the app still has the required permissions.";
+    return "Shopify denied this connection check. Confirm the app still has the required permissions.";
   }
   return "Could not confirm the shop connection. Try again.";
 }

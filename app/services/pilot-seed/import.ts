@@ -9,8 +9,8 @@ import { getPilotPack, KLIQUEA_PILOT_PACK_VERSION } from "./packs";
 export class PilotSeedNotConfirmedError extends Error {
   readonly code = "PILOT_SEED_NOT_CONFIRMED";
 
-  constructor() {
-    super("Confirm the import for this shop.");
+  constructor(message = "Confirm the import for this shop.") {
+    super(message);
     this.name = "PilotSeedNotConfirmedError";
   }
 }
@@ -95,7 +95,9 @@ export class PilotSeedService {
 
   async resetPack(input: ResetPilotSeedInput): Promise<ResetPilotSeedResult> {
     if (!input.confirm) {
-      throw new PilotSeedNotConfirmedError();
+      throw new PilotSeedNotConfirmedError(
+        "Confirm clearing the import for this shop.",
+      );
     }
 
     const definition = getPilotPack(input.packId);

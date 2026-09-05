@@ -40,6 +40,19 @@ function statusLabel(status: ChecklistItemStatus): string {
   }
 }
 
+function questionnaireLabel(
+  status: "not_started" | "pilot_imported" | "published",
+): string {
+  switch (status) {
+    case "pilot_imported":
+      return "Pilot imported";
+    case "published":
+      return "Published";
+    default:
+      return "Not started";
+  }
+}
+
 export default function Overview() {
   const { overview } = useLoaderData<typeof loader>();
 
@@ -84,7 +97,7 @@ export default function Overview() {
 
       <s-section heading="Status">
         <s-paragraph>
-          Questionnaire: {overview.questionnaireStatus.replaceAll("_", " ")}
+          Questionnaire: {questionnaireLabel(overview.questionnaireStatus)}
         </s-paragraph>
         <s-paragraph>
           Customer account extensions: not started. Preferences are collected
@@ -92,17 +105,18 @@ export default function Overview() {
           inside Shopify&apos;s native sign-in form.
         </s-paragraph>
         <s-paragraph>
-          Completed profiles: {overview.completedProfiles}
+          Completed profiles: coming later
         </s-paragraph>
         <s-paragraph>
-          Last synchronization errors: {overview.lastSyncErrorCount}
+          Last synchronization errors: coming later
         </s-paragraph>
       </s-section>
 
       <s-section slot="aside" heading="Next step">
         <s-paragraph>
           Confirm the authenticated shop from Settings, then import the
-          optional pilot questionnaire only if you intend to seed this shop.
+          optional pilot questionnaire only if you intend to use it for this
+          shop.
         </s-paragraph>
         <s-link href="/app/settings">Open settings</s-link>
       </s-section>
