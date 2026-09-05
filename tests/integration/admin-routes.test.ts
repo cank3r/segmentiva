@@ -56,7 +56,7 @@ describe("Overview and Settings page handlers", () => {
       formData: form({ intent: "import_pilot" }),
     });
     expect(denied.seed?.ok).toBe(false);
-    expect(denied.seed?.message).toBe("Pilot seed requires an explicit confirmation.");
+    expect(denied.seed?.message).toBe("Confirm the import for this shop.");
 
     const imported = await handleSettingsAction(prisma, {
       session: { shop: shopDomain },

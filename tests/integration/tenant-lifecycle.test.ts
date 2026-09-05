@@ -31,6 +31,10 @@ function deferred() {
   return { promise, resolve };
 }
 
+function webhookTriggeredAt(from = new Date()): string {
+  return new Date(from.getTime() + 1_000).toISOString();
+}
+
 describe("tenant isolation and installation lifecycle", () => {
   let prisma: PrismaClient;
 
@@ -93,6 +97,7 @@ describe("tenant isolation and installation lifecycle", () => {
     const first = await uninstall.handleAppUninstalled(shopA, {
       topic: "APP_UNINSTALLED",
       webhookId: `wh-${shopA.shopDomain}-1`,
+      triggeredAt: webhookTriggeredAt(),
     });
     expect(first.alreadyProcessed).toBe(false);
     expect(first.processingStopped).toBe(true);
@@ -117,6 +122,7 @@ describe("tenant isolation and installation lifecycle", () => {
     await uninstall.handleAppUninstalled(shop, {
       topic: "APP_UNINSTALLED",
       webhookId: `wh-${shop.shopDomain}`,
+      triggeredAt: webhookTriggeredAt(),
     });
 
     const loaded = await lifecycle.loadOrCreateWithoutReinstall(shop);
@@ -137,6 +143,7 @@ describe("tenant isolation and installation lifecycle", () => {
     await uninstall.handleAppUninstalled(shop, {
       topic: "APP_UNINSTALLED",
       webhookId,
+      triggeredAt: webhookTriggeredAt(),
     });
 
     await insertOfflineSession(prisma, shop.shopDomain, `offline_${shop.shopDomain}-re`);
@@ -216,7 +223,11 @@ describe("tenant isolation and installation lifecycle", () => {
     await expect(
       uninstall.handleAppUninstalled(
         shop,
-        { topic: "APP_UNINSTALLED", webhookId },
+        {
+          topic: "APP_UNINSTALLED",
+          webhookId,
+          triggeredAt: webhookTriggeredAt(),
+        },
         { failAt: "after_claim" },
       ),
     ).rejects.toBeInstanceOf(InjectedUninstallFailure);
@@ -255,7 +266,11 @@ describe("tenant isolation and installation lifecycle", () => {
     await expect(
       uninstall.handleAppUninstalled(
         shop,
-        { topic: "APP_UNINSTALLED", webhookId },
+        {
+          topic: "APP_UNINSTALLED",
+          webhookId,
+          triggeredAt: webhookTriggeredAt(),
+        },
         { failAt: "after_state_change" },
       ),
     ).rejects.toBeInstanceOf(InjectedUninstallFailure);
@@ -284,7 +299,11 @@ describe("tenant isolation and installation lifecycle", () => {
     await expect(
       uninstall.handleAppUninstalled(
         shop,
-        { topic: "APP_UNINSTALLED", webhookId },
+        {
+          topic: "APP_UNINSTALLED",
+          webhookId,
+          triggeredAt: webhookTriggeredAt(),
+        },
         { failAt: "during_session_delete" },
       ),
     ).rejects.toBeInstanceOf(InjectedUninstallFailure);
@@ -487,5 +506,125 @@ describe("tenant isolation and installation lifecycle", () => {
     expect(shops.settingsOf(await shops.getByVerifiedShop(shop)).pilotSeed).toBeUndefined();
     const again = await seed.importPack({ shop, packId: "kliquea-pilot", confirm: true });
     expect(again.alreadyImported).toBe(false);
+  });
+
+  it("does not revert a newer reinstall when a late uninstall omits X-Shopify-Triggered-At", async () => {
+    const shop = { shopDomain: uniqueShop("missing-triggered") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const uninstall = new UninstallService(prisma);
+    const first = await lifecycle.ensureInstalled(shop);
+    await uninstall.handleAppUninstalled(shop, {
+      topic: "APP_UNINSTALLED",
+      webhookId: `wh-${shop.shopDomain}-old`,
+      triggeredAt: webhookTriggeredAt(first.installedAt),
+    });
+
+    await insertOfflineSession(
+      prisma,
+      shop.shopDomain,
+      `offline_${shop.shopDomain}`,
+      "reinstall-token",
+    );
+    const reinstalled = await lifecycle.ensureInstalled(shop);
+    expect(reinstalled.installationState).toBe("INSTALLED");
+
+    const late = await uninstall.handleAppUninstalled(shop, {
+      topic: "APP_UNINSTALLED",
+      webhookId: `wh-${shop.shopDomain}-late`,
+    });
+    expect(late.ignoredAsStale).toBe(true);
+    expect(late.processingStopped).toBe(false);
+    const current = await new ShopRepository(prisma).getByVerifiedShop(shop);
+    expect(current.installationState).toBe("INSTALLED");
+    expect(await prisma.session.count({ where: { shop: shop.shopDomain } })).toBe(
+      1,
+    );
+    const session = await prisma.session.findFirstOrThrow({
+      where: { shop: shop.shopDomain },
+    });
+    expect(session.accessToken).toBe("reinstall-token");
+  });
+
+  it("resumes a PENDING uninstall without the header using the claimed timestamp, then ignores it after reinstall", async () => {
+    const shop = { shopDomain: uniqueShop("resume-no-header") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const uninstall = new UninstallService(prisma);
+    const webhooks = new ProcessedWebhookRepository(prisma);
+    await lifecycle.ensureInstalled(shop);
+    const sessionId = `offline_${shop.shopDomain}`;
+    await insertOfflineSession(prisma, shop.shopDomain, sessionId, "original-token");
+    const webhookId = `wh-${shop.shopDomain}-pending`;
+
+    await expect(
+      uninstall.handleAppUninstalled(
+        shop,
+        {
+          topic: "APP_UNINSTALLED",
+          webhookId,
+          triggeredAt: webhookTriggeredAt(),
+        },
+        { failAt: "after_state_change" },
+      ),
+    ).rejects.toBeInstanceOf(InjectedUninstallFailure);
+
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { accessToken: "reinstall-token" },
+    });
+    const reinstalled = await lifecycle.ensureInstalled(shop);
+    expect(reinstalled.installationState).toBe("INSTALLED");
+    expect(reinstalled.installGeneration).toBeGreaterThan(1);
+
+    const retry = await uninstall.handleAppUninstalled(shop, {
+      topic: "APP_UNINSTALLED",
+      webhookId,
+    });
+    expect(retry.ignoredAsStale).toBe(true);
+    expect(retry.processingStopped).toBe(false);
+    expect(await webhooks.getStatus(shop, webhookId)).toBe("COMPLETED");
+    expect((await lifecycle.load(shop))?.installationState).toBe("INSTALLED");
+    const remaining = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    expect(remaining.accessToken).toBe("reinstall-token");
+  });
+
+  it("does not delete a rotated session written after claim when resuming after the state change", async () => {
+    const shop = { shopDomain: uniqueShop("resume-new-token") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const uninstall = new UninstallService(prisma);
+    await lifecycle.ensureInstalled(shop);
+    const sessionId = `offline_${shop.shopDomain}`;
+    await insertOfflineSession(prisma, shop.shopDomain, sessionId, "old-token");
+    const webhookId = `wh-${shop.shopDomain}-rotate`;
+
+    await expect(
+      uninstall.handleAppUninstalled(
+        shop,
+        {
+          topic: "APP_UNINSTALLED",
+          webhookId,
+          triggeredAt: webhookTriggeredAt(),
+        },
+        { failAt: "after_state_change" },
+      ),
+    ).rejects.toBeInstanceOf(InjectedUninstallFailure);
+
+    expect((await lifecycle.load(shop))?.installationState).toBe("UNINSTALLED");
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { accessToken: "oauth-token-before-afterAuth" },
+    });
+
+    const retry = await uninstall.handleAppUninstalled(shop, {
+      topic: "APP_UNINSTALLED",
+      webhookId,
+    });
+    expect(retry.processingStopped).toBe(true);
+    expect((await lifecycle.load(shop))?.installationState).toBe("UNINSTALLED");
+    const remaining = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    expect(remaining.accessToken).toBe("oauth-token-before-afterAuth");
   });
 });

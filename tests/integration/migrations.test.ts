@@ -31,7 +31,14 @@ describe("clean database migrations", () => {
     const columnNames = columns.map((column) => column.name);
     expect(columnNames).toContain("installGeneration");
     expect(columnNames).toContain("pilotSeedPackId");
-    expect(columnNames).not.toContain("settings");
+    const webhookColumns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+      `PRAGMA table_info("ProcessedWebhook")`,
+    );
+    const webhookColumnNames = webhookColumns.map((column) => column.name);
+    expect(webhookColumnNames).toContain("status");
+    expect(webhookColumnNames).toContain("claimedInstallGeneration");
+    expect(webhookColumnNames).toContain("claimedTriggeredAt");
+    expect(webhookColumnNames).toContain("sessionFingerprints");
 
     await prisma.$disconnect();
   });

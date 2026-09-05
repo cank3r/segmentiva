@@ -72,6 +72,7 @@ describe("Kliquea pilot pack", () => {
   });
 
   it("validates pack structure and version before import", () => {
+    expect(kliqueaPilotQuestionnaire.version).toBe("1.0.0");
     expect(() => getPilotPack("kliquea-pilot")).not.toThrow();
     expect(() =>
       assertValidPilotPack({
