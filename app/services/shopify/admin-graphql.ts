@@ -105,7 +105,7 @@ function publicMessageFor(codes: string[]): string {
   if (codes.includes("ACCESS_DENIED")) {
     return "Shopify denied this Admin API read. Check that the app still has the required permissions.";
   }
-  return "Shopify Admin GraphQL returned errors.";
+  return "Could not confirm the shop connection. Try again.";
 }
 
 export type QueryAdminGraphqlOptions = {
@@ -137,7 +137,7 @@ export async function queryAdminGraphql<T>(
     if (!response.ok) {
       throw new ShopifyGraphqlError({
         message: "Shopify Admin GraphQL request failed.",
-        publicMessage: "Shopify Admin GraphQL request failed.",
+        publicMessage: "Could not confirm the shop connection. Try again.",
         codes,
         retryable: false,
       });
@@ -166,7 +166,7 @@ export async function queryAdminGraphql<T>(
     if (body.data == null) {
       throw new ShopifyGraphqlError({
         message: "Shopify Admin GraphQL returned no data.",
-        publicMessage: "Shopify Admin GraphQL returned no data.",
+        publicMessage: "Could not confirm the shop connection. Try again.",
         codes,
         retryable: false,
       });

@@ -101,7 +101,7 @@ export default function Settings() {
 
       <s-section heading="Diagnostic">
         <s-paragraph>
-          Runs a harmless Admin GraphQL read of the current shop identity. It
+          Runs a harmless connection check of the current shop identity. It
           does not display access tokens, secrets, or customer data.
         </s-paragraph>
         <Form method="post">
@@ -213,11 +213,6 @@ export default function Settings() {
             </s-stack>
           </Form>
         ) : null}
-        <s-paragraph>
-          Operators who need a command-line import should use the documented
-          seed command in the project README. It is an operator action, not a
-          merchant control.
-        </s-paragraph>
       </s-section>
     </s-page>
   );

@@ -10,7 +10,7 @@ export class PilotSeedNotConfirmedError extends Error {
   readonly code = "PILOT_SEED_NOT_CONFIRMED";
 
   constructor() {
-    super("Pilot seed requires an explicit confirmation.");
+    super("Confirm the import for this shop.");
     this.name = "PilotSeedNotConfirmedError";
   }
 }

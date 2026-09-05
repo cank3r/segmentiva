@@ -34,7 +34,7 @@ function statusLabel(status: ChecklistItemStatus): string {
     case "blocked":
       return "Blocked";
     case "later":
-      return "Later phase";
+      return "Coming later";
     default:
       return "Pending";
   }

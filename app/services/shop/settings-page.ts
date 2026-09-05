@@ -68,10 +68,10 @@ export async function loadSettingsPageData(
     reauthorizeAction: comparison.reauthorizeAction,
     accountCompatibility: "New customer accounts (classic accounts unsupported)",
     privacyEndpoints: [
-      { topic: "customers/data_request", status: "Not implemented (Phase 5)" },
-      { topic: "customers/redact", status: "Not implemented (Phase 5)" },
-      { topic: "shop/redact", status: "Not implemented (Phase 5)" },
-      { topic: "app/uninstalled", status: "Active" },
+      { topic: "Customer data request", status: "Coming later" },
+      { topic: "Customer data deletion", status: "Coming later" },
+      { topic: "Shop data deletion", status: "Coming later" },
+      { topic: "App uninstall", status: "Active" },
     ],
     retentionSummary:
       "Uninstall stops processing and deletes Shopify sessions for this shop. Merchant configuration is retained until the later shop/redact compliance workflow.",
@@ -87,10 +87,34 @@ export async function handleSettingsAction(
     formData: FormData;
   },
 ): Promise<SettingsActionData> {
+  const intent = String(input.formData.get("intent") ?? "");
   try {
     return await handleSettingsActionInner(db, input);
   } catch (error) {
     const publicError = toPublicSettingsError(error);
+    if (intent === "run_diagnostic") {
+      return {
+        diagnostic: {
+          status: "error",
+          apiVersion: ApiVersion.July26,
+          verifiedShopDomain: verifiedShopFromSession(input.session).shopDomain,
+          shopName: null,
+          myshopifyDomain: null,
+          planDisplayName: null,
+          partnerDevelopment: null,
+          grantedScopes: parseGrantedScopes(input.session.scope),
+          requestedScopes: parseGrantedScopes(process.env.SCOPES),
+          scopeComparison: compareRequestedAndGrantedScopes(
+            parseGrantedScopes(process.env.SCOPES),
+            parseGrantedScopes(input.session.scope),
+          ),
+          identityMatchesSession: null,
+          throttled: false,
+          graphqlErrorCodes: [],
+          message: publicError.message,
+        },
+      };
+    }
     return {
       seed: {
         ok: false,

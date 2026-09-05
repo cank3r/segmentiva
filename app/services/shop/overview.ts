@@ -51,16 +51,16 @@ export function buildOverviewSnapshot(
       id: "diagnostic",
       label: "Confirm shop connection",
       status:
-        settings.lastDiagnostic?.status === "ok"
-          ? "complete"
-          : processingEnabled
-            ? "pending"
-            : "blocked",
+        !processingEnabled
+          ? "blocked"
+          : settings.lastDiagnostic?.status === "ok"
+            ? "complete"
+            : "pending",
       detail:
         settings.lastDiagnostic?.status === "ok"
-          ? "Harmless Admin API diagnostic succeeded for the verified shop."
+          ? "Connection diagnostic succeeded for the verified shop."
           : processingEnabled
-            ? "Run the harmless Admin API diagnostic from Settings."
+            ? "Run the connection diagnostic from Settings."
             : "Processing is stopped until the app is installed.",
     },
     {
@@ -74,27 +74,27 @@ export function buildOverviewSnapshot(
             : "blocked",
       detail:
         settings.pilotSeed?.status === "applied"
-          ? "Pilot questionnaire imported. Publishing is available in the questionnaire builder."
+          ? "Pilot questionnaire imported for this shop."
           : "Import is never automatic. Use Settings and confirm before importing for this shop only.",
     },
     {
       id: "publish",
       label: "Publish a questionnaire version",
       status: "later",
-      detail: "Available in Phase 2 — the versioned questionnaire builder.",
+      detail: "Coming later — the versioned questionnaire builder.",
     },
     {
       id: "customer-extensions",
       label: "Place customer account extensions",
       status: "later",
       detail:
-        "Available in Phase 3. Preferences are collected after authenticated account access, not inside Shopify login.",
+        "Coming later. Preferences are collected after authenticated account access, not inside Shopify login.",
     },
     {
       id: "segments",
       label: "Activate tags and native segments",
       status: "later",
-      detail: "Available in Phase 4.",
+      detail: "Coming later.",
     },
   ];
 
