@@ -101,6 +101,12 @@ describe("shop diagnostic redaction", () => {
     expect(result.status).toBe("error");
     expect(result.identityMatchesSession).toBe(false);
     expect(result.verifiedShopDomain).toBe("shop-a.myshopify.com");
+    expect(result.shopName).toBeNull();
+    expect(result.myshopifyDomain).toBeNull();
+    expect(result.planDisplayName).toBeNull();
+    expect(result.partnerDevelopment).toBeNull();
+    expect(JSON.stringify(result)).not.toContain("Other Shop");
+    expect(JSON.stringify(result)).not.toContain("shop-b.myshopify.com");
     expect(containsSensitiveKeys(result)).toBe(false);
   });
 });

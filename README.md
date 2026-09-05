@@ -212,7 +212,28 @@ npm ci        # install exact locked dependencies
 npm run setup  # generate the Prisma client and apply local SQLite migrations
 ```
 
-`npm run setup` defaults `DATABASE_URL` to `file:dev.sqlite` when the variable is unset. Shared environments should set a PostgreSQL `DATABASE_URL` explicitly. Do not switch the Prisma provider in this repository until the production database is provisioned.
+`npm run setup` defaults `DATABASE_URL` to `file:dev.sqlite` when the variable is unset and uses the SQLite Prisma schema plus `prisma/migrations`.
+
+Shared and production environments must use PostgreSQL **and** the PostgreSQL schema. Setting `DATABASE_URL=postgresql://...` is not enough if you run raw `npx prisma` against `prisma/schema.prisma` (Prisma error `P1012`). Always run Prisma through the helper:
+
+```bash
+# SQLite (local default)
+npm run setup
+npm run db:validate
+
+# PostgreSQL (shared/production)
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/segmentiva npm run setup
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/segmentiva npm run db:validate
+```
+
+The helper (`scripts/prisma-with-db.mjs`) selects:
+
+| `DATABASE_URL` | Schema | Migrations |
+| --- | --- | --- |
+| `file:...` or unset | `prisma/schema.prisma` | `prisma/migrations` |
+| `postgresql://...` | `prisma/postgresql/schema.prisma` | `prisma/postgresql/migrations` |
+
+Keep both schema files in sync when changing `Shop`, `Session`, or `ProcessedWebhook`.
 
 ### Environment variables
 
@@ -223,7 +244,7 @@ During normal development the Shopify CLI injects Shopify credentials automatica
 | `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | App credentials from the Shopify app record |
 | `SHOPIFY_APP_URL` | Public URL (the CLI sets this to the dev tunnel) |
 | `SCOPES` | Admin API scopes, kept in sync with `shopify.app.toml` (`read_customers,write_customers`) |
-| `DATABASE_URL` | Local SQLite `file:dev.sqlite`, or PostgreSQL in shared environments |
+| `DATABASE_URL` | Local SQLite `file:dev.sqlite` via `prisma/schema.prisma`. PostgreSQL requires a `postgresql://` URL **and** `scripts/prisma-with-db.mjs` so `prisma/postgresql/schema.prisma` is used. Changing only the URL is not supported. |
 
 ### Commands
 
@@ -232,8 +253,9 @@ During normal development the Shopify CLI injects Shopify credentials automatica
 | `npm run dev` | Run the app locally through the Shopify CLI (`shopify app dev`) |
 | `npm run build` | Production build |
 | `npm start` | Serve the production build |
-| `npm run setup` | Prisma client generation and migrations |
-| `npm run seed:pilot` | Explicitly import the Kliquea pilot questionnaire for one shop |
+| `npm run setup` | Prisma client generation and migrations for the provider that matches `DATABASE_URL` |
+| `npm run db:validate` | `prisma validate` against the selected schema |
+| `npm run seed:pilot` | Explicitly import or reset the Kliquea pilot questionnaire for one shop |
 | `npm run typecheck` | React Router typegen and `tsc --noEmit` |
 | `npm run lint` | ESLint |
 | `npm test` | Vitest unit and integration tests |
@@ -244,9 +266,16 @@ The pilot pack is merchant configuration, not a store identity. It never runs on
 
 ```bash
 npm run seed:pilot -- --shop=example.myshopify.com --pack=kliquea-pilot --confirm
+npm run seed:pilot -- --shop=example.myshopify.com --pack=kliquea-pilot --reset --confirm
 ```
 
-Without `--shop`, `--pack`, and `--confirm`, the command refuses to run. The same import is available from Settings after an explicit checkbox confirmation for the currently authenticated shop. Reimporting an already-imported pack is idempotent.
+Without `--shop`, `--pack`, and `--confirm`, the command refuses to run. `--reset` clears the current shop's pilot import so it can be imported again (repair/reset). The same import and clear actions are available from Settings after an explicit checkbox confirmation for the currently authenticated shop. Reimporting an already-imported pack at the same version is idempotent.
+
+### APP_UNINSTALLED and expiring offline tokens
+
+Segmentiva keeps Shopify's official `authenticate.webhook()` and `future.expiringOfflineAccessTokens: true`. Current `@shopify/shopify-app-react-router` (1.2.x and current 2.x mainline) validates HMAC, then refreshes the offline session, and can throw HTTP 500 when that refresh fails after uninstall. There is no official patched release that skips refresh for `APP_UNINSTALLED`.
+
+Segmentiva therefore recovers **only** `APP_UNINSTALLED` when the official authenticator throws 500 after HMAC has already succeeded. Invalid HMAC still returns 401 from the official library. This is not a custom HMAC implementation.
 
 ### Still pending for Shopify store validation
 

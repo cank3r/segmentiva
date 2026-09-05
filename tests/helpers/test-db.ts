@@ -14,21 +14,40 @@ export function createMigratedTestDatabase(): {
   const directory = mkdtempSync(join(tmpdir(), "segmentiva-phase1-"));
   const databaseUrl = `file:${join(directory, "test.sqlite")}`;
 
-  execFileSync(
-    "npx",
-    ["prisma", "migrate", "deploy"],
-    {
-      cwd: ROOT,
-      env: { ...process.env, DATABASE_URL: databaseUrl },
-      stdio: "pipe",
-    },
-  );
+  execFileSync("node", ["scripts/prisma-with-db.mjs", "migrate", "deploy"], {
+    cwd: ROOT,
+    env: { ...process.env, DATABASE_URL: databaseUrl },
+    stdio: "pipe",
+  });
 
   const prisma = new PrismaClient({
     datasources: { db: { url: databaseUrl } },
   });
 
   return { prisma, databaseUrl };
+}
+
+export async function insertOfflineSession(
+  prisma: PrismaClient,
+  shopDomain: string,
+  id: string,
+  accessToken = `token-${id}`,
+) {
+  await prisma.session.create({
+    data: {
+      id,
+      shop: shopDomain,
+      state: "offline",
+      isOnline: false,
+      accessToken,
+      scope: "read_customers,write_customers",
+    },
+  });
+}
+
+export function uniqueShop(label: string): string {
+  const suffix = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  return `shop-${label}-${suffix}.myshopify.com`;
 }
 
 export const SHOP_A = "shop-a.myshopify.com";

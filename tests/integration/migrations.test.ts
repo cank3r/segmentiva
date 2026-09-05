@@ -25,6 +25,14 @@ describe("clean database migrations", () => {
     expect(names).toContain("Session");
     expect(names).toContain("ProcessedWebhook");
 
+    const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+      `PRAGMA table_info("Shop")`,
+    );
+    const columnNames = columns.map((column) => column.name);
+    expect(columnNames).toContain("installGeneration");
+    expect(columnNames).toContain("pilotSeedPackId");
+    expect(columnNames).not.toContain("settings");
+
     await prisma.$disconnect();
   });
 

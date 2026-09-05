@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { kliqueaPilotQuestionnaire } from "../../app/services/pilot-seed/kliquea-pilot";
-import { getPilotPack, UnknownPilotPackError } from "../../app/services/pilot-seed/packs";
+import {
+  assertValidPilotPack,
+  getPilotPack,
+  InvalidPilotPackError,
+  UnknownPilotPackError,
+} from "../../app/services/pilot-seed/packs";
 
 describe("Kliquea pilot pack", () => {
   it("matches the section 6 logical questions and stable keys", () => {
@@ -64,5 +69,21 @@ describe("Kliquea pilot pack", () => {
     expect(() => getPilotPack("kliquea-production-store")).toThrow(
       UnknownPilotPackError,
     );
+  });
+
+  it("validates pack structure and version before import", () => {
+    expect(() => getPilotPack("kliquea-pilot")).not.toThrow();
+    expect(() =>
+      assertValidPilotPack({
+        ...kliqueaPilotQuestionnaire,
+        version: "0.0.0-invalid",
+      }),
+    ).toThrow(InvalidPilotPackError);
+    expect(() =>
+      assertValidPilotPack({
+        ...kliqueaPilotQuestionnaire,
+        questions: [],
+      }),
+    ).toThrow(InvalidPilotPackError);
   });
 });

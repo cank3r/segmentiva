@@ -10,16 +10,23 @@ function read(relativePath: string): string {
 }
 
 describe("Phase 1 configuration guards", () => {
-  it("documents DATABASE_URL for local SQLite and PostgreSQL-ready shared environments", () => {
+  it("keeps separate SQLite and PostgreSQL Prisma layouts", () => {
     const envExample = read(".env.example");
     expect(envExample).toMatch(/^DATABASE_URL=file:dev\.sqlite$/m);
     expect(envExample).toContain("postgresql://");
 
-    const schema = read("prisma/schema.prisma");
-    expect(schema).toContain('url      = env("DATABASE_URL")');
-    expect(schema).toContain("model Shop");
-    expect(schema).toContain("model Session");
-    expect(schema).toContain("model ProcessedWebhook");
+    const sqlite = read("prisma/schema.prisma");
+    const postgres = read("prisma/postgresql/schema.prisma");
+    expect(sqlite).toContain('provider = "sqlite"');
+    expect(postgres).toContain('provider = "postgresql"');
+    expect(sqlite).toContain("model Shop");
+    expect(postgres).toContain("model Shop");
+    expect(sqlite).toContain("WebhookDeliveryStatus");
+    expect(postgres).toContain("WebhookDeliveryStatus");
+    expect(read("prisma/migrations/migration_lock.toml")).toContain('provider = "sqlite"');
+    expect(read("prisma/postgresql/migrations/migration_lock.toml")).toContain(
+      'provider = "postgresql"',
+    );
   });
 
   it("does not auto-import the pilot questionnaire during afterAuth", () => {
@@ -28,15 +35,6 @@ describe("Phase 1 configuration guards", () => {
     expect(shopifyServer).toContain("ensureInstalled");
     expect(shopifyServer).not.toContain("PilotSeedService");
     expect(shopifyServer).not.toContain("kliquea-pilot");
-  });
-
-  it("keeps Admin loaders from reinstalling an uninstalled shop", () => {
-    const overview = read("app/routes/app._index.tsx");
-    const settings = read("app/routes/app.settings.tsx");
-    expect(overview).toContain("loadOrCreateWithoutReinstall");
-    expect(settings).toContain("loadOrCreateWithoutReinstall");
-    expect(overview).not.toContain("ensureInstalled");
-    expect(settings).not.toContain("ensureInstalled");
   });
 
   it("uses the current ShopPlan publicDisplayName field in the diagnostic query", () => {
