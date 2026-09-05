@@ -160,6 +160,39 @@ describe("tenant isolation and installation lifecycle", () => {
     expect(await prisma.session.count({ where: { shop: shop.shopDomain } })).toBe(1);
   });
 
+  it("invalidates a previous ok diagnostic after uninstall and reinstall", async () => {
+    const shop = { shopDomain: uniqueShop("reinstall-diag") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const shops = new ShopRepository(prisma);
+    const uninstall = new UninstallService(prisma);
+
+    await lifecycle.ensureInstalled(shop);
+    await shops.updateDiagnostic(shop, {
+      status: "ok",
+      ranAt: new Date("2026-09-04T00:00:00.000Z"),
+      summary: { status: "ok" },
+    });
+    const beforeUninstall = await shops.getByVerifiedShop(shop);
+    expect(
+      buildOverviewSnapshot(shop.shopDomain, beforeUninstall, true).checklist.find(
+        (item) => item.id === "diagnostic",
+      )?.status,
+    ).toBe("complete");
+
+    await uninstall.handleAppUninstalled(shop, {
+      topic: "APP_UNINSTALLED",
+      webhookId: `wh-${shop.shopDomain}-diag`,
+      triggeredAt: webhookTriggeredAt(),
+    });
+    const reinstalled = await lifecycle.ensureInstalled(shop);
+    expect(shops.settingsOf(reinstalled).lastDiagnostic).toBeUndefined();
+    expect(
+      buildOverviewSnapshot(shop.shopDomain, reinstalled, true).checklist.find(
+        (item) => item.id === "diagnostic",
+      )?.status,
+    ).toBe("pending");
+  });
+
   it("ignores a stale uninstall webhook with a new id after a newer reinstall", async () => {
     const shop = { shopDomain: uniqueShop("stale") };
     const lifecycle = new ShopLifecycleService(prisma);
@@ -206,6 +239,14 @@ describe("tenant isolation and installation lifecycle", () => {
     const overview = buildOverviewSnapshot(shop.shopDomain, record, true);
     const diagnostic = overview.checklist.find((item) => item.id === "diagnostic");
     expect(diagnostic?.status).toBe("complete");
+
+    const stillInstalled = await lifecycle.ensureInstalled(shop);
+    expect(shops.settingsOf(stillInstalled).lastDiagnostic?.status).toBe("ok");
+    expect(
+      buildOverviewSnapshot(shop.shopDomain, stillInstalled, true).checklist.find(
+        (item) => item.id === "diagnostic",
+      )?.status,
+    ).toBe("complete");
   });
 
   it("resumes APP_UNINSTALLED after an injected failure following claim", async () => {
@@ -293,7 +334,13 @@ describe("tenant isolation and installation lifecycle", () => {
     const lifecycle = new ShopLifecycleService(prisma);
     const uninstall = new UninstallService(prisma);
     await lifecycle.ensureInstalled(shop);
-    await insertOfflineSession(prisma, shop.shopDomain, `offline_${shop.shopDomain}`);
+    await insertOfflineSession(prisma, shop.shopDomain, `offline_${shop.shopDomain}`, "token-a");
+    await insertOfflineSession(
+      prisma,
+      shop.shopDomain,
+      `offline_${shop.shopDomain}-2`,
+      "token-b",
+    );
     const webhookId = `wh-${shop.shopDomain}-delete`;
 
     await expect(
@@ -307,6 +354,9 @@ describe("tenant isolation and installation lifecycle", () => {
         { failAt: "during_session_delete" },
       ),
     ).rejects.toBeInstanceOf(InjectedUninstallFailure);
+
+    expect((await lifecycle.load(shop))?.installationState).toBe("UNINSTALLED");
+    expect(await prisma.session.count({ where: { shop: shop.shopDomain } })).toBe(1);
 
     const retry = await uninstall.handleAppUninstalled(shop, {
       topic: "APP_UNINSTALLED",

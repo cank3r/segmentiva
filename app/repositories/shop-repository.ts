@@ -19,7 +19,7 @@ export type RepositoryHooks = {
   beforeCreate?: () => Promise<void>;
   afterCreate?: () => Promise<void>;
   failAfterStateChange?: () => Promise<void>;
-  failDuringSessionDelete?: () => Promise<void>;
+  failDuringSessionDelete?: (deletedSoFar: number) => Promise<void>;
 };
 
 export class ShopNotFoundError extends Error {
@@ -114,6 +114,7 @@ export class ShopRepository {
       await this.getByVerifiedShop(shop);
     }
 
+    const previousState = existing?.installationState;
     return this.db.shop.update({
       where: { shopDomain: shop.shopDomain },
       data: {
@@ -121,6 +122,13 @@ export class ShopRepository {
         installedAt: now,
         uninstalledAt: null,
         installGeneration: { increment: 1 },
+        ...(previousState === "UNINSTALLED"
+          ? {
+              lastDiagnosticStatus: null,
+              lastDiagnosticAt: null,
+              lastDiagnosticSummary: Prisma.DbNull,
+            }
+          : {}),
       },
     });
   }
@@ -253,7 +261,6 @@ export class ShopRepository {
     shop: VerifiedShopContext,
     fingerprints: Array<{ id: string; fingerprint: string }>,
   ): Promise<number> {
-    await this.hooks.failDuringSessionDelete?.();
     if (fingerprints.length === 0) {
       return 0;
     }
@@ -281,6 +288,7 @@ export class ShopRepository {
         },
       });
       deleted += result.count;
+      await this.hooks.failDuringSessionDelete?.(deleted);
     }
     return deleted;
   }

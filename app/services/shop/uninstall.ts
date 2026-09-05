@@ -109,8 +109,10 @@ export class UninstallService {
         ...this.hooks,
         failDuringSessionDelete:
           options.failAt === "during_session_delete"
-            ? async () => {
-                throw new InjectedUninstallFailure("during_session_delete");
+            ? async (deletedSoFar: number) => {
+                if (deletedSoFar >= 1) {
+                  throw new InjectedUninstallFailure("during_session_delete");
+                }
               }
             : this.hooks.failDuringSessionDelete,
       };
