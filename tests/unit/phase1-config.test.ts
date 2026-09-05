@@ -58,4 +58,11 @@ describe("Phase 1 configuration guards", () => {
       expect(source).not.toMatch(/kliquea\.com/i);
     }
   });
+
+  it("pins @shopify/shopify-app-react-router to 1.2.1 until uninstall refresh is fixed", () => {
+    const pkg = JSON.parse(read("package.json")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(pkg.dependencies["@shopify/shopify-app-react-router"]).toBe("1.2.1");
+  });
 });
