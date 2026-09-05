@@ -100,15 +100,9 @@ export class UninstallService {
     }
 
     const latestAfterTransition = await this.lifecycle.load(shop);
-    const claimedGeneration = claimContext.claimedInstallGeneration ?? 0;
-    const generationMovedOn =
-      claimedGeneration > 0 &&
-      latestAfterTransition != null &&
-      latestAfterTransition.installGeneration > claimedGeneration;
     const shouldDeleteSessions =
-      generationMovedOn ||
-      (latestAfterTransition?.installationState === "UNINSTALLED" &&
-        !transition.ignoredAsStale);
+      latestAfterTransition?.installationState === "UNINSTALLED" &&
+      !transition.ignoredAsStale;
 
     if (shouldDeleteSessions) {
       const deleteHooks: RepositoryHooks = {

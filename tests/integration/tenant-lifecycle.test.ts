@@ -746,4 +746,41 @@ describe("tenant isolation and installation lifecycle", () => {
     });
     expect(remaining.accessToken).toBe("reauth-token");
   });
+
+  it("does not delete the live session when a PENDING uninstall resumes after same-token afterAuth", async () => {
+    const shop = { shopDomain: uniqueShop("pending-same-token") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const uninstall = new UninstallService(prisma);
+    await lifecycle.ensureInstalled(shop);
+    const sessionId = `offline_${shop.shopDomain}`;
+    await insertOfflineSession(prisma, shop.shopDomain, sessionId, "live-token");
+    const webhookId = `wh-${shop.shopDomain}-same-token`;
+
+    await expect(
+      uninstall.handleAppUninstalled(
+        shop,
+        {
+          topic: "APP_UNINSTALLED",
+          webhookId,
+          triggeredAt: webhookTriggeredAt(),
+        },
+        { failAt: "after_claim" },
+      ),
+    ).rejects.toBeInstanceOf(InjectedUninstallFailure);
+
+    const reauth = await lifecycle.ensureInstalled(shop);
+    expect(reauth.installationState).toBe("INSTALLED");
+    expect(reauth.installGeneration).toBeGreaterThan(1);
+
+    const retry = await uninstall.handleAppUninstalled(shop, {
+      topic: "APP_UNINSTALLED",
+      webhookId,
+    });
+    expect(retry.ignoredAsStale).toBe(true);
+    expect((await lifecycle.load(shop))?.installationState).toBe("INSTALLED");
+    const remaining = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    expect(remaining.accessToken).toBe("live-token");
+  });
 });
