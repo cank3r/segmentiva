@@ -12,6 +12,7 @@
     "start": "react-router-serve ./build/server/index.js",
     "docker-start": "npm run setup && npm run start",
     "setup": "node scripts/prisma-with-db.mjs generate && node scripts/prisma-with-db.mjs migrate deploy",
+    "db:validate": "node scripts/prisma-with-db.mjs validate",
     "seed:pilot": "tsx scripts/seed-pilot.ts",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
     "test": "vitest run",
