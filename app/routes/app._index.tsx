@@ -4,26 +4,14 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import db from "../db.server";
 import {
-  buildOverviewSnapshot,
   type ChecklistItemStatus,
 } from "../services/shop/overview";
-import { ShopLifecycleService } from "../services/shop/lifecycle";
+import { loadOverviewPageData } from "../services/shop/overview-loader";
 import { authenticate } from "../shopify.server";
-import { verifiedShopFromSession } from "../tenancy/verified-shop";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const shop = verifiedShopFromSession(session);
-  const lifecycle = new ShopLifecycleService(db);
-  const record = await lifecycle.loadOrCreateWithoutReinstall(shop);
-
-  return {
-    overview: buildOverviewSnapshot(
-      shop.shopDomain,
-      record,
-      lifecycle.canProcess(record),
-    ),
-  };
+  return loadOverviewPageData(db, session);
 };
 
 function statusTone(
@@ -70,7 +58,7 @@ export default function Overview() {
           Current shop: {overview.shopDomain}
         </s-paragraph>
         <s-paragraph>
-          Installation state: {overview.installationState}
+          Installation: {overview.installationLabel}
         </s-paragraph>
         <s-paragraph>
           Processing: {overview.processingEnabled ? "enabled" : "stopped"}

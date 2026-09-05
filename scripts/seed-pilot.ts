@@ -7,11 +7,12 @@ import { normalizeShopDomain } from "../app/tenancy/shop-domain";
 function printUsage(): void {
   console.error(
     [
-      "Import a pilot questionnaire pack for one shop.",
+      "Import or reset a pilot questionnaire pack for one shop.",
       "Never runs on install. Disabled unless you pass --shop, --pack, and --confirm.",
       "",
       "Usage:",
       "  npm run seed:pilot -- --shop=<shop>.myshopify.com --pack=kliquea-pilot --confirm",
+      "  npm run seed:pilot -- --shop=<shop>.myshopify.com --pack=kliquea-pilot --reset --confirm",
     ].join("\n"),
   );
 }
@@ -22,6 +23,7 @@ async function main(): Promise<number> {
       shop: { type: "string" },
       pack: { type: "string" },
       confirm: { type: "boolean", default: false },
+      reset: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     strict: true,
@@ -34,6 +36,24 @@ async function main(): Promise<number> {
 
   const shopDomain = normalizeShopDomain(values.shop);
   const service = new PilotSeedService(db);
+
+  if (values.reset) {
+    const result = await service.resetPack({
+      shop: { shopDomain },
+      packId: values.pack,
+      confirm: Boolean(values.confirm),
+    });
+    console.log(
+      JSON.stringify({
+        ok: true,
+        shop: shopDomain,
+        packId: result.packId,
+        reset: result.reset,
+      }),
+    );
+    return 0;
+  }
+
   const result = await service.importPack({
     shop: { shopDomain },
     packId: values.pack,
@@ -45,6 +65,7 @@ async function main(): Promise<number> {
       ok: true,
       shop: shopDomain,
       packId: result.packId,
+      version: result.version,
       alreadyImported: result.alreadyImported,
       importedAt: result.importedAt,
     }),

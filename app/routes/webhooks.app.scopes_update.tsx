@@ -1,39 +1,39 @@
 import type { ActionFunctionArgs } from "react-router";
+import type { PrismaClient } from "@prisma/client";
 
 import db from "../db.server";
 import { safeLog } from "../observability/safe-log";
-import { ProcessedWebhookRepository } from "../repositories/processed-webhook-repository";
-import { ShopLifecycleService } from "../services/shop/lifecycle";
+import { ScopesUpdateService } from "../services/shop/scopes-update";
 import { authenticate } from "../shopify.server";
 import { verifiedShopFromWebhookShop } from "../tenancy/verified-shop";
+import { authenticateShopifyWebhook } from "../webhooks/authenticate-webhook";
+import type { AuthenticatedWebhookContext } from "../webhooks/authenticate-webhook";
 
-export const action = async ({ request }: ActionFunctionArgs) => {
+export async function processAppScopesUpdateRequest(
+  request: Request,
+  deps: {
+    authenticate?: { webhook: (request: Request) => Promise<AuthenticatedWebhookContext> };
+    db?: PrismaClient;
+  } = {},
+): Promise<Response> {
   const { payload, session, topic, shop, webhookId } =
-    await authenticate.webhook(request);
+    await authenticateShopifyWebhook(
+      request,
+      deps.authenticate ?? authenticate,
+    );
   const verifiedShop = verifiedShopFromWebhookShop(shop);
-  const claimed = await new ProcessedWebhookRepository(db).claim(verifiedShop, {
-    topic,
-    webhookId,
-  });
-
-  if (!claimed) {
-    return new Response();
-  }
-
-  const lifecycle = new ShopLifecycleService(db);
-  const record = await lifecycle.load(verifiedShop);
-  if (!lifecycle.canProcess(record) || !session) {
-    return new Response();
-  }
-
-  const current = payload.current;
+  const current = payload?.current;
   const scope = Array.isArray(current) ? current.join(",") : undefined;
-  if (scope) {
-    await db.session.update({
-      where: { id: session.id },
-      data: { scope },
-    });
-  }
+
+  await new ScopesUpdateService(deps.db ?? db).handleAppScopesUpdate(
+    verifiedShop,
+    {
+      topic,
+      webhookId,
+      sessionId: session?.id,
+      scope,
+    },
+  );
 
   safeLog("Processed app scopes update webhook", {
     shop: verifiedShop.shopDomain,
@@ -42,4 +42,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   });
 
   return new Response();
+}
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  return processAppScopesUpdateRequest(request);
 };

@@ -1,5 +1,5 @@
 import type { ShopRecord } from "../../repositories/shop-repository";
-import { parseShopSettings } from "./settings";
+import { parseShopSettings, settingsFromShopRecord } from "./settings";
 
 export type ChecklistItemStatus = "complete" | "pending" | "blocked" | "later";
 
@@ -13,9 +13,8 @@ export type ChecklistItem = {
 export type OverviewSnapshot = {
   shopDomain: string;
   installationState: "INSTALLED" | "UNINSTALLED" | "UNKNOWN";
+  installationLabel: string;
   processingEnabled: boolean;
-  installedAt: string | null;
-  uninstalledAt: string | null;
   questionnaireStatus: "not_started" | "pilot_imported" | "published";
   completedProfiles: number;
   lastSyncErrorCount: number;
@@ -28,11 +27,13 @@ export function buildOverviewSnapshot(
   record: ShopRecord | null,
   processingEnabled: boolean,
 ): OverviewSnapshot {
-  const settings = record ? parseShopSettings(record.settings) : {};
+  const settings = record
+    ? settingsFromShopRecord(record)
+    : parseShopSettings({});
   const installationState = record?.installationState ?? "UNKNOWN";
   const questionnaireStatus = record?.publishedQuestionnaireId
     ? "published"
-    : settings.pilotSeed
+    : settings.pilotSeed?.status === "applied"
       ? "pilot_imported"
       : "not_started";
 
@@ -65,10 +66,16 @@ export function buildOverviewSnapshot(
     {
       id: "pilot-seed",
       label: "Import the optional pilot questionnaire",
-      status: settings.pilotSeed ? "complete" : processingEnabled ? "pending" : "blocked",
-      detail: settings.pilotSeed
-        ? "Pilot pack imported. Publishing is available in the questionnaire builder."
-        : "Import is never automatic. Use Settings or `npm run seed:pilot` with an explicit shop.",
+      status:
+        settings.pilotSeed?.status === "applied"
+          ? "complete"
+          : processingEnabled
+            ? "pending"
+            : "blocked",
+      detail:
+        settings.pilotSeed?.status === "applied"
+          ? "Pilot questionnaire imported. Publishing is available in the questionnaire builder."
+          : "Import is never automatic. Use Settings and confirm before importing for this shop only.",
     },
     {
       id: "publish",
@@ -94,9 +101,13 @@ export function buildOverviewSnapshot(
   return {
     shopDomain,
     installationState,
+    installationLabel:
+      installationState === "INSTALLED"
+        ? "Installed"
+        : installationState === "UNINSTALLED"
+          ? "Uninstalled"
+          : "Unknown",
     processingEnabled,
-    installedAt: record?.installedAt.toISOString() ?? null,
-    uninstalledAt: record?.uninstalledAt?.toISOString() ?? null,
     questionnaireStatus,
     completedProfiles: 0,
     lastSyncErrorCount: 0,

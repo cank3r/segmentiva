@@ -7,8 +7,11 @@ export const KLIQUEA_PILOT_PACK_ID = "kliquea-pilot" as const;
  * This is merchant configuration, not a store domain or credential.
  * Phase 2 persists these keys as Questionnaire/Question/Option rows.
  */
+export const KLIQUEA_PILOT_PACK_VERSION = "1.0.0" as const;
+
 export const kliqueaPilotQuestionnaire: PilotQuestionnaireDefinition = {
   packId: KLIQUEA_PILOT_PACK_ID,
+  version: KLIQUEA_PILOT_PACK_VERSION,
   defaultLocale: "en",
   title: {
     en: "Tell us how you like to shop",

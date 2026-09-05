@@ -1,3 +1,5 @@
+import type { Shop } from "@prisma/client";
+
 export type LocalizedText = {
   en: string;
   es: string;
@@ -24,6 +26,7 @@ export type PilotPackId = "kliquea-pilot";
 
 export type PilotQuestionnaireDefinition = {
   packId: PilotPackId;
+  version: string;
   defaultLocale: "en";
   title: LocalizedText;
   introduction: LocalizedText;
@@ -32,9 +35,13 @@ export type PilotQuestionnaireDefinition = {
   questions: PilotQuestionDefinition[];
 };
 
+export type PilotSeedStatus = "applied" | "failed" | "reset";
+
 export type PilotSeedRecord = {
   packId: PilotPackId;
+  version: string;
   importedAt: string;
+  status: PilotSeedStatus;
   definition: PilotQuestionnaireDefinition;
 };
 
@@ -49,6 +56,17 @@ export type ShopSettings = {
   pilotSeed?: PilotSeedRecord;
   lastDiagnostic?: LastDiagnosticRecord;
 };
+
+function isLocalizedText(value: unknown): value is LocalizedText {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    typeof (value as LocalizedText).en === "string" &&
+    typeof (value as LocalizedText).es === "string" &&
+    (value as LocalizedText).en.length > 0 &&
+    (value as LocalizedText).es.length > 0
+  );
+}
 
 export function parseShopSettings(value: unknown): ShopSettings {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
@@ -89,4 +107,60 @@ export function parseShopSettings(value: unknown): ShopSettings {
   }
 
   return settings;
+}
+
+export function settingsFromShopRecord(record: Shop): ShopSettings {
+  const settings: ShopSettings = {};
+
+  if (record.defaultLocale === "en" || record.defaultLocale === "es") {
+    settings.defaultLocale = record.defaultLocale;
+  }
+
+  if (record.accountCompatibility === "new_customer_accounts") {
+    settings.accountCompatibility = "new_customer_accounts";
+  }
+
+  if (
+    record.pilotSeedPackId === "kliquea-pilot" &&
+    record.pilotSeedImportedAt &&
+    record.pilotSeedVersion &&
+    (record.pilotSeedStatus === "applied" ||
+      record.pilotSeedStatus === "failed" ||
+      record.pilotSeedStatus === "reset") &&
+    record.pilotSeedDefinition &&
+    typeof record.pilotSeedDefinition === "object"
+  ) {
+    settings.pilotSeed = {
+      packId: "kliquea-pilot",
+      version: record.pilotSeedVersion,
+      importedAt: record.pilotSeedImportedAt.toISOString(),
+      status: record.pilotSeedStatus,
+      definition: record.pilotSeedDefinition as PilotQuestionnaireDefinition,
+    };
+  }
+
+  if (
+    record.lastDiagnosticStatus &&
+    record.lastDiagnosticAt &&
+    (record.lastDiagnosticStatus === "ok" ||
+      record.lastDiagnosticStatus === "error" ||
+      record.lastDiagnosticStatus === "stopped")
+  ) {
+    settings.lastDiagnostic = {
+      status: record.lastDiagnosticStatus,
+      ranAt: record.lastDiagnosticAt.toISOString(),
+    };
+  }
+
+  return settings;
+}
+
+export function isPilotDefinitionShape(
+  value: unknown,
+): value is PilotQuestionnaireDefinition {
+  return isLocalizedText(
+    value && typeof value === "object"
+      ? (value as PilotQuestionnaireDefinition).title
+      : null,
+  );
 }

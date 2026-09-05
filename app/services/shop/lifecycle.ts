@@ -1,6 +1,10 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { ShopRepository, type ShopRecord } from "../../repositories/shop-repository";
+import {
+  ShopRepository,
+  type RepositoryHooks,
+  type ShopRecord,
+} from "../../repositories/shop-repository";
 import type { VerifiedShopContext } from "../../tenancy/verified-shop";
 
 export class ShopNotProcessableError extends Error {
@@ -16,22 +20,18 @@ export class ShopNotProcessableError extends Error {
 export class ShopLifecycleService {
   private readonly shops: ShopRepository;
 
-  constructor(db: PrismaClient) {
-    this.shops = new ShopRepository(db);
+  constructor(db: PrismaClient, hooks: RepositoryHooks = {}) {
+    this.shops = new ShopRepository(db, hooks);
   }
 
   async ensureInstalled(shop: VerifiedShopContext): Promise<ShopRecord> {
-    return this.shops.upsertInstalled(shop);
+    return this.shops.recordVerifiedInstall(shop);
   }
 
   async loadOrCreateWithoutReinstall(
     shop: VerifiedShopContext,
   ): Promise<ShopRecord> {
     return this.shops.createInstalledIfAbsent(shop);
-  }
-
-  async markUninstalled(shop: VerifiedShopContext): Promise<ShopRecord> {
-    return this.shops.markUninstalled(shop);
   }
 
   async load(shop: VerifiedShopContext): Promise<ShopRecord | null> {

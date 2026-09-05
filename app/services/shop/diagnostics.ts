@@ -6,6 +6,12 @@ import {
   type AdminGraphqlClient,
   ShopifyGraphqlError,
 } from "../shopify/admin-graphql";
+import {
+  compareRequestedAndGrantedScopes,
+  parseGrantedScopes,
+  requestedScopesFromEnv,
+  type ScopeComparison,
+} from "./scopes";
 
 const PINNED_API_VERSION = ApiVersion.July26;
 
@@ -45,8 +51,10 @@ export type PublicDiagnosticResult = {
   partnerDevelopment: boolean | null;
   grantedScopes: string[];
   requestedScopes: string[];
+  scopeComparison: ScopeComparison;
   identityMatchesSession: boolean | null;
   throttled: boolean;
+  graphqlErrorCodes: string[];
   message: string;
 };
 
@@ -68,25 +76,24 @@ export function containsSensitiveKeys(value: unknown): boolean {
   return false;
 }
 
-export function parseGrantedScopes(scope: string | null | undefined): string[] {
-  if (!scope) {
-    return [];
-  }
-  return scope
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .sort();
-}
-
-export function requestedScopesFromEnv(): string[] {
-  return parseGrantedScopes(process.env.SCOPES);
-}
+export { parseGrantedScopes, requestedScopesFromEnv };
 
 function assertPublicDiagnostic(result: PublicDiagnosticResult): void {
   if (containsSensitiveKeys(result)) {
     throw new Error("Diagnostic result contained a sensitive key.");
   }
+}
+
+function emptyIdentityFields(): Pick<
+  PublicDiagnosticResult,
+  "shopName" | "myshopifyDomain" | "planDisplayName" | "partnerDevelopment"
+> {
+  return {
+    shopName: null,
+    myshopifyDomain: null,
+    planDisplayName: null,
+    partnerDevelopment: null,
+  };
 }
 
 export async function runShopDiagnostic(input: {
@@ -95,19 +102,24 @@ export async function runShopDiagnostic(input: {
   grantedScopes: string[];
   processable: boolean;
 }): Promise<PublicDiagnosticResult> {
+  const requestedScopes = requestedScopesFromEnv();
+  const scopeComparison = compareRequestedAndGrantedScopes(
+    requestedScopes,
+    input.grantedScopes,
+  );
+
   if (!input.processable) {
     const stopped: PublicDiagnosticResult = {
       status: "stopped",
       apiVersion: PINNED_API_VERSION,
       verifiedShopDomain: input.shop.shopDomain,
-      shopName: null,
-      myshopifyDomain: null,
-      planDisplayName: null,
-      partnerDevelopment: null,
+      ...emptyIdentityFields(),
       grantedScopes: input.grantedScopes,
-      requestedScopes: requestedScopesFromEnv(),
+      requestedScopes,
+      scopeComparison,
       identityMatchesSession: null,
       throttled: false,
+      graphqlErrorCodes: [],
       message:
         "Segmentiva is uninstalled for this shop. Application processing is stopped.",
     };
@@ -124,8 +136,27 @@ export async function runShopDiagnostic(input: {
     const myshopifyDomain = data.shop.myshopifyDomain.toLowerCase();
     const identityMatchesSession = myshopifyDomain === input.shop.shopDomain;
 
+    if (!identityMatchesSession) {
+      const mismatch: PublicDiagnosticResult = {
+        status: "error",
+        apiVersion: PINNED_API_VERSION,
+        verifiedShopDomain: input.shop.shopDomain,
+        ...emptyIdentityFields(),
+        grantedScopes: input.grantedScopes,
+        requestedScopes,
+        scopeComparison,
+        identityMatchesSession: false,
+        throttled,
+        graphqlErrorCodes: [],
+        message:
+          "Authenticated shop identity did not match the current session.",
+      };
+      assertPublicDiagnostic(mismatch);
+      return mismatch;
+    }
+
     const result: PublicDiagnosticResult = {
-      status: identityMatchesSession ? "ok" : "error",
+      status: "ok",
       apiVersion: PINNED_API_VERSION,
       verifiedShopDomain: input.shop.shopDomain,
       shopName: data.shop.name,
@@ -133,31 +164,33 @@ export async function runShopDiagnostic(input: {
       planDisplayName: data.shop.plan.publicDisplayName,
       partnerDevelopment: data.shop.plan.partnerDevelopment,
       grantedScopes: input.grantedScopes,
-      requestedScopes: requestedScopesFromEnv(),
-      identityMatchesSession,
+      requestedScopes,
+      scopeComparison,
+      identityMatchesSession: true,
       throttled,
-      message: identityMatchesSession
-        ? "Authenticated Admin API read succeeded for the verified shop."
-        : "Authenticated shop identity did not match the current session.",
+      graphqlErrorCodes: [],
+      message: "Authenticated Admin API read succeeded for the verified shop.",
     };
     assertPublicDiagnostic(result);
     return result;
   } catch (error) {
+    const codes =
+      error instanceof ShopifyGraphqlError ? error.codes : [];
     const failed: PublicDiagnosticResult = {
       status: "error",
       apiVersion: PINNED_API_VERSION,
       verifiedShopDomain: input.shop.shopDomain,
-      shopName: null,
-      myshopifyDomain: null,
-      planDisplayName: null,
-      partnerDevelopment: null,
+      ...emptyIdentityFields(),
       grantedScopes: input.grantedScopes,
-      requestedScopes: requestedScopesFromEnv(),
+      requestedScopes,
+      scopeComparison,
       identityMatchesSession: null,
-      throttled: false,
+      throttled:
+        error instanceof ShopifyGraphqlError ? error.retryable && codes.includes("THROTTLED") : false,
+      graphqlErrorCodes: codes,
       message:
         error instanceof ShopifyGraphqlError
-          ? error.message
+          ? error.publicMessage
           : "Diagnostic read could not be completed.",
     };
     assertPublicDiagnostic(failed);
