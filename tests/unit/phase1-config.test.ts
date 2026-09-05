@@ -27,6 +27,10 @@ describe("Phase 1 configuration guards", () => {
     expect(read("prisma/postgresql/migrations/migration_lock.toml")).toContain(
       'provider = "postgresql"',
     );
+    const webToml = read("shopify.web.toml");
+    expect(webToml).toContain("scripts/prisma-with-db.mjs");
+    expect(webToml).not.toContain("npm exec prisma generate");
+    expect(webToml).not.toContain("npm exec prisma migrate deploy");
   });
 
   it("does not auto-import the pilot questionnaire during afterAuth", () => {

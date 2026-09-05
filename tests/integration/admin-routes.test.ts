@@ -33,18 +33,23 @@ describe("Overview and Settings page handlers", () => {
     const shopDomain = uniqueShop("settings-load");
     await new ShopLifecycleService(prisma).ensureInstalled({ shopDomain });
     const previous = process.env.SCOPES;
-    process.env.SCOPES = "read_customers,write_customers";
-    const data = await loadSettingsPageData(prisma, {
-      shop: shopDomain,
-      scope: "read_customers",
-    });
-    process.env.SCOPES = previous;
-    expect(data.shopDomain).toBe(shopDomain);
-    expect(data.missingScopes.map((scope) => scope.scope)).toEqual([
-      "write_customers",
-    ]);
-    expect(data.reauthorizeAction).toMatch(/Open Segmentiva from Shopify Admin/i);
-    expect(data.pilotImported).toBe(false);
+    try {
+      process.env.SCOPES = "read_customers,write_customers";
+      const data = await loadSettingsPageData(prisma, {
+        shop: shopDomain,
+        scope: "read_customers",
+      });
+      expect(data.shopDomain).toBe(shopDomain);
+      expect(data.requestedScopes).toEqual(["Read customers", "Write customers"]);
+      expect(data.grantedScopes).toEqual(["Read customers"]);
+      expect(data.missingScopes.map((scope) => scope.scope)).toEqual([
+        "write_customers",
+      ]);
+      expect(data.reauthorizeAction).toMatch(/Open Segmentiva from Shopify Admin/i);
+      expect(data.pilotImported).toBe(false);
+    } finally {
+      process.env.SCOPES = previous;
+    }
   });
 
   it("imports the pilot pack only when confirm=yes", async () => {
@@ -65,6 +70,24 @@ describe("Overview and Settings page handlers", () => {
     });
     expect(imported.seed?.ok).toBe(true);
     expect(imported.seed?.alreadyImported).toBe(false);
+
+    const resetDenied = await handleSettingsAction(prisma, {
+      session: { shop: shopDomain },
+      admin: { graphql: async () => new Response("{}", { status: 200 }) },
+      formData: form({ intent: "reset_pilot" }),
+    });
+    expect(resetDenied.seed?.ok).toBe(false);
+    expect(resetDenied.seed?.message).toBe(
+      "Confirm clearing the import for this shop.",
+    );
+
+    const reset = await handleSettingsAction(prisma, {
+      session: { shop: shopDomain },
+      admin: { graphql: async () => new Response("{}", { status: 200 }) },
+      formData: form({ intent: "reset_pilot", confirm: "yes" }),
+    });
+    expect(reset.seed?.ok).toBe(true);
+    expect(reset.seed?.reset).toBe(true);
   });
 
   it("returns a generic message when the database fails after authentication", async () => {

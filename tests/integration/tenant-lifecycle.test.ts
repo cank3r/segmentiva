@@ -368,6 +368,94 @@ describe("tenant isolation and installation lifecycle", () => {
     expect(unchanged.scope).toBe("read_customers,write_customers");
   });
 
+  it("resumes APP_SCOPES_UPDATE after an injected failure following the scope write", async () => {
+    const shop = { shopDomain: uniqueShop("scopes-write-fail") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const scopes = new ScopesUpdateService(prisma);
+    const webhooks = new ProcessedWebhookRepository(prisma);
+    await lifecycle.ensureInstalled(shop);
+    const sessionId = `offline_${shop.shopDomain}`;
+    await insertOfflineSession(prisma, shop.shopDomain, sessionId, "old-token");
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { scope: "read_customers" },
+    });
+    const webhookId = `wh-${shop.shopDomain}-scopes-write`;
+
+    await expect(
+      scopes.handleAppScopesUpdate(
+        shop,
+        {
+          topic: "APP_SCOPES_UPDATE",
+          webhookId,
+          sessionId,
+          scope: "read_customers,write_customers",
+        },
+        { failAt: "after_scope_write" },
+      ),
+    ).rejects.toBeInstanceOf(InjectedScopesUpdateFailure);
+
+    expect(await webhooks.getStatus(shop, webhookId)).toBe("PENDING");
+    const written = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
+    expect(written.scope).toBe("read_customers,write_customers");
+
+    const retry = await scopes.handleAppScopesUpdate(shop, {
+      topic: "APP_SCOPES_UPDATE",
+      webhookId,
+      sessionId,
+      scope: "read_customers,write_customers",
+    });
+    expect(retry.alreadyProcessed).toBe(false);
+    expect(retry.applied).toBe(true);
+    expect(await webhooks.getStatus(shop, webhookId)).toBe("COMPLETED");
+    const session = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
+    expect(session.scope).toBe("read_customers,write_customers");
+  });
+
+  it("does not apply a PENDING scopes update after a newer verified install", async () => {
+    const shop = { shopDomain: uniqueShop("scopes-reinstall") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const scopes = new ScopesUpdateService(prisma);
+    await lifecycle.ensureInstalled(shop);
+    const sessionId = `offline_${shop.shopDomain}`;
+    await insertOfflineSession(prisma, shop.shopDomain, sessionId, "old-token");
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { scope: "read_customers" },
+    });
+    const webhookId = `wh-${shop.shopDomain}-scopes-stale`;
+
+    await expect(
+      scopes.handleAppScopesUpdate(
+        shop,
+        {
+          topic: "APP_SCOPES_UPDATE",
+          webhookId,
+          sessionId,
+          scope: "read_customers,write_customers",
+        },
+        { failAt: "after_claim" },
+      ),
+    ).rejects.toBeInstanceOf(InjectedScopesUpdateFailure);
+
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { accessToken: "reinstall-token", scope: "read_customers" },
+    });
+    await lifecycle.ensureInstalled(shop);
+
+    const retry = await scopes.handleAppScopesUpdate(shop, {
+      topic: "APP_SCOPES_UPDATE",
+      webhookId,
+      sessionId,
+      scope: "read_customers,write_customers",
+    });
+    expect(retry.applied).toBe(false);
+    const session = await prisma.session.findUniqueOrThrow({ where: { id: sessionId } });
+    expect(session.scope).toBe("read_customers");
+    expect(session.accessToken).toBe("reinstall-token");
+  });
+
   it("lets afterAuth win when uninstall creates the Shop row first", async () => {
     const shop = { shopDomain: uniqueShop("race-uninstall-first") };
     const installReady = deferred();
@@ -626,5 +714,36 @@ describe("tenant isolation and installation lifecycle", () => {
       where: { id: sessionId },
     });
     expect(remaining.accessToken).toBe("oauth-token-before-afterAuth");
+  });
+
+  it("does not let a delayed uninstall beat a verified reauth while still INSTALLED", async () => {
+    const shop = { shopDomain: uniqueShop("reauth-still-installed") };
+    const lifecycle = new ShopLifecycleService(prisma);
+    const uninstall = new UninstallService(prisma);
+    const first = await lifecycle.ensureInstalled(shop);
+    const sessionId = `offline_${shop.shopDomain}`;
+    await insertOfflineSession(prisma, shop.shopDomain, sessionId, "first-token");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { accessToken: "reauth-token" },
+    });
+    const reauth = await lifecycle.ensureInstalled(shop);
+    expect(reauth.installGeneration).toBeGreaterThan(first.installGeneration);
+    expect(reauth.installedAt.getTime()).toBeGreaterThan(first.installedAt.getTime());
+
+    const late = await uninstall.handleAppUninstalled(shop, {
+      topic: "APP_UNINSTALLED",
+      webhookId: `wh-${shop.shopDomain}-delayed`,
+      triggeredAt: new Date(first.installedAt.getTime() + 5).toISOString(),
+    });
+    expect(late.ignoredAsStale).toBe(true);
+    expect(late.processingStopped).toBe(false);
+    const current = await new ShopRepository(prisma).getByVerifiedShop(shop);
+    expect(current.installationState).toBe("INSTALLED");
+    const remaining = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+    });
+    expect(remaining.accessToken).toBe("reauth-token");
   });
 });
