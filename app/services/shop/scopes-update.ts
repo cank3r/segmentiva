@@ -1,6 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { ProcessedWebhookRepository } from "../../repositories/processed-webhook-repository";
+import {
+  fingerprintAccessToken,
+  ProcessedWebhookRepository,
+} from "../../repositories/processed-webhook-repository";
 import { ShopLifecycleService } from "./lifecycle";
 import type { VerifiedShopContext } from "../../tenancy/verified-shop";
 
@@ -54,18 +57,69 @@ export class ScopesUpdateService {
       return { alreadyProcessed: true, applied: false };
     }
 
+    if (claimed.kind === "process") {
+      const current = await this.lifecycle.load(shop);
+      const session = input.sessionId
+        ? await this.db.session.findFirst({
+            where: { id: input.sessionId, shop: shop.shopDomain },
+            select: { id: true, accessToken: true },
+          })
+        : null;
+      await this.webhooks.attachClaimContext(shop, input.webhookId, {
+        claimedInstallGeneration: current?.installGeneration ?? 0,
+        claimedTriggeredAt: null,
+        sessionFingerprints: session
+          ? [
+              {
+                id: session.id,
+                fingerprint: fingerprintAccessToken(session.accessToken),
+              },
+            ]
+          : [],
+      });
+    }
+
     if (options.failAt === "after_claim") {
       throw new InjectedScopesUpdateFailure("after_claim");
     }
 
+    const claimContext = await this.webhooks.getClaimContext(
+      shop,
+      input.webhookId,
+    );
     const record = await this.lifecycle.load(shop);
+    const generationMatches =
+      claimContext.claimedInstallGeneration == null ||
+      record?.installGeneration === claimContext.claimedInstallGeneration;
     let applied = false;
-    if (this.lifecycle.canProcess(record) && input.sessionId && input.scope) {
-      await this.db.session.updateMany({
+    if (
+      this.lifecycle.canProcess(record) &&
+      generationMatches &&
+      input.sessionId &&
+      input.scope
+    ) {
+      const session = await this.db.session.findFirst({
         where: { id: input.sessionId, shop: shop.shopDomain },
-        data: { scope: input.scope },
+        select: { id: true, accessToken: true },
       });
-      applied = true;
+      const expected = claimContext.sessionFingerprints.find(
+        (entry) => entry.id === input.sessionId,
+      );
+      const tokenMatches =
+        session != null &&
+        expected != null &&
+        fingerprintAccessToken(session.accessToken) === expected.fingerprint;
+      if (tokenMatches) {
+        const updated = await this.db.session.updateMany({
+          where: {
+            id: input.sessionId,
+            shop: shop.shopDomain,
+            accessToken: session.accessToken,
+          },
+          data: { scope: input.scope },
+        });
+        applied = updated.count > 0;
+      }
     }
 
     if (options.failAt === "after_scope_write") {

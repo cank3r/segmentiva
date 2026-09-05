@@ -80,8 +80,9 @@ export class ShopRepository {
 
   /**
    * Records a verified OAuth install or reinstall from afterAuth.
-   * Revives UNINSTALLED shops. Does not treat a concurrent uninstall winner as
-   * the final state — afterAuth always applies the INSTALLED transition.
+   * Always applies the INSTALLED transition and increments installGeneration,
+   * including when the shop is already INSTALLED, so a delayed uninstall cannot
+   * beat a newer verified authorization.
    */
   async recordVerifiedInstall(shop: VerifiedShopContext): Promise<ShopRecord> {
     const now = new Date();
@@ -109,12 +110,8 @@ export class ShopRepository {
       }
     }
 
-    const current = existing ?? (await this.getByVerifiedShop(shop));
-    if (
-      current.installationState === "INSTALLED" &&
-      current.uninstalledAt == null
-    ) {
-      return current;
+    if (!existing) {
+      await this.getByVerifiedShop(shop);
     }
 
     return this.db.shop.update({
