@@ -1,23 +1,18 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-//
-// Local development uses SQLite. Shared/production environments use the
-// PostgreSQL schema at prisma/postgresql/schema.prisma. Switching only
-// DATABASE_URL is not enough — run Prisma through scripts/prisma-with-db.mjs
-// (npm run setup) so the matching schema and migration history are selected.
-// Keep this file's models in sync with prisma/postgresql/schema.prisma.
+// PostgreSQL schema for shared and production environments.
+// Keep models in sync with prisma/schema.prisma (SQLite local development).
+// Select this file by setting a postgresql:// DATABASE_URL and running
+// Prisma through scripts/prisma-with-db.mjs — do not change only the URL
+// while pointing at the SQLite schema.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Official Shopify session storage model. Do not duplicate access tokens on Shop.
-// Required by @shopify/shopify-app-session-storage-prisma.
 model Session {
   id                  String    @id
   shop                String
@@ -73,9 +68,6 @@ model Shop {
   updatedAt                DateTime @updatedAt
 }
 
-// Idempotency key for HMAC-verified Shopify webhook deliveries.
-// Stores only shop domain, topic, webhook id, and delivery status — never the payload.
-// Only COMPLETED deliveries are treated as duplicates; PENDING rows are resumed.
 model ProcessedWebhook {
   id          String                @id @default(cuid())
   shopDomain  String

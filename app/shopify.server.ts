@@ -5,7 +5,10 @@ import {
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
+
 import prisma from "./db.server";
+import { ShopLifecycleService } from "./services/shop/lifecycle";
+import { verifiedShopFromSession } from "./tenancy/verified-shop";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -18,6 +21,12 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,
+  },
+  hooks: {
+    afterAuth: async ({ session }) => {
+      const shop = verifiedShopFromSession(session);
+      await new ShopLifecycleService(prisma).ensureInstalled(shop);
+    },
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
