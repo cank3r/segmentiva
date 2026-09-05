@@ -9,14 +9,17 @@ import {
   type PublicDiagnosticResult,
 } from "./diagnostics";
 import { ShopLifecycleService } from "./lifecycle";
-import { toPublicSettingsError } from "./public-errors";
+import {
+  toPublicSettingsError,
+  type PublicActionError,
+} from "./public-errors";
 import { compareRequestedAndGrantedScopes, labelsForScopes } from "./scopes";
 import { settingsFromShopRecord } from "./settings";
 import type { AdminGraphqlClient } from "../shopify/admin-graphql";
 import { verifiedShopFromSession } from "../../tenancy/verified-shop";
 import { ApiVersion } from "@shopify/shopify-app-react-router/server";
 
-export type SettingsLoaderData = {
+export type SettingsPageContent = {
   shopDomain: string;
   installationLabel: string;
   processingEnabled: boolean;
@@ -30,6 +33,10 @@ export type SettingsLoaderData = {
   retentionSummary: string;
   pilotImported: boolean;
 };
+
+export type SettingsLoaderData =
+  | ({ error: null } & SettingsPageContent)
+  | { error: PublicActionError; shopDomain: string };
 
 export type SettingsActionData = {
   diagnostic?: PublicDiagnosticResult;
@@ -46,37 +53,46 @@ export async function loadSettingsPageData(
   session: { shop: string; scope?: string | null },
 ): Promise<SettingsLoaderData> {
   const shop = verifiedShopFromSession(session);
-  const lifecycle = new ShopLifecycleService(db);
-  const record = await lifecycle.loadOrCreateWithoutReinstall(shop);
-  const settings = settingsFromShopRecord(record);
-  const grantedScopes = parseGrantedScopes(session.scope);
-  const requestedScopes = parseGrantedScopes(process.env.SCOPES);
-  const comparison = compareRequestedAndGrantedScopes(
-    requestedScopes,
-    grantedScopes,
-  );
+  try {
+    const lifecycle = new ShopLifecycleService(db);
+    const record = await lifecycle.loadOrCreateWithoutReinstall(shop);
+    const settings = settingsFromShopRecord(record);
+    const grantedScopes = parseGrantedScopes(session.scope);
+    const requestedScopes = parseGrantedScopes(process.env.SCOPES);
+    const comparison = compareRequestedAndGrantedScopes(
+      requestedScopes,
+      grantedScopes,
+    );
 
-  return {
-    shopDomain: shop.shopDomain,
-    installationLabel:
-      record.installationState === "INSTALLED" ? "Installed" : "Uninstalled",
-    processingEnabled: lifecycle.canProcess(record),
-    apiVersion: ApiVersion.July26,
-    grantedScopes: labelsForScopes(grantedScopes),
-    requestedScopes: labelsForScopes(requestedScopes),
-    missingScopes: comparison.missing,
-    reauthorizeAction: comparison.reauthorizeAction,
-    accountCompatibility: "New customer accounts (classic accounts unsupported)",
-    privacyEndpoints: [
-      { topic: "Customer data request", status: "Coming later" },
-      { topic: "Customer data deletion", status: "Coming later" },
-      { topic: "Shop data deletion", status: "Coming later" },
-      { topic: "App uninstall", status: "Active" },
-    ],
-    retentionSummary:
-      "Uninstall stops processing and deletes Shopify sessions for this shop. Merchant configuration is kept so a reinstall can reuse it.",
-    pilotImported: settings.pilotSeed?.status === "applied",
-  };
+    return {
+      error: null,
+      shopDomain: shop.shopDomain,
+      installationLabel:
+        record.installationState === "INSTALLED" ? "Installed" : "Uninstalled",
+      processingEnabled: lifecycle.canProcess(record),
+      apiVersion: ApiVersion.July26,
+      grantedScopes: labelsForScopes(grantedScopes),
+      requestedScopes: labelsForScopes(requestedScopes),
+      missingScopes: comparison.missing,
+      reauthorizeAction: comparison.reauthorizeAction,
+      accountCompatibility:
+        "New customer accounts (classic accounts unsupported)",
+      privacyEndpoints: [
+        { topic: "Customer data request", status: "Coming later" },
+        { topic: "Customer data deletion", status: "Coming later" },
+        { topic: "Shop data deletion", status: "Coming later" },
+        { topic: "App uninstall", status: "Active" },
+      ],
+      retentionSummary:
+        "Uninstall stops processing and deletes Shopify sessions for this shop. Merchant configuration is kept so a reinstall can reuse it.",
+      pilotImported: settings.pilotSeed?.status === "applied",
+    };
+  } catch (error) {
+    return {
+      error: toPublicSettingsError(error, "Settings loader failed"),
+      shopDomain: shop.shopDomain,
+    };
+  }
 }
 
 export async function handleSettingsAction(

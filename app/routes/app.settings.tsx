@@ -33,6 +33,16 @@ export default function Settings() {
   const submittingIntent =
     navigation.formData?.get("intent")?.toString() ?? "";
 
+  if (data.error) {
+    return (
+      <s-page heading="Settings">
+        <s-banner tone="critical" heading="Couldn't load this page">
+          {data.error.message}
+        </s-banner>
+      </s-page>
+    );
+  }
+
   return (
     <s-page heading="Settings">
       {!data.processingEnabled ? (
@@ -199,6 +209,7 @@ function PilotConfirmForm(props: {
           name="confirm"
           value="yes"
           checked={confirmed}
+          disabled={props.disabled}
           onChange={(event) => {
             const target = event.currentTarget as unknown as {
               checked?: boolean;

@@ -9,7 +9,10 @@ export type PublicActionError = {
   message: string;
 };
 
-export function toPublicSettingsError(error: unknown): PublicActionError {
+export function toPublicSettingsError(
+  error: unknown,
+  logEvent = "Settings action failed",
+): PublicActionError {
   if (error instanceof PilotSeedNotConfirmedError) {
     return { code: error.code, message: error.message };
   }
@@ -31,7 +34,7 @@ export function toPublicSettingsError(error: unknown): PublicActionError {
       ? String((error as { code?: unknown }).code)
       : undefined;
 
-  safeLog("Settings action failed", {
+  safeLog(logEvent, {
     status: prismaCode && prismaCode.startsWith("P") ? prismaCode : "UNEXPECTED_ERROR",
   });
 

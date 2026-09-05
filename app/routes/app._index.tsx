@@ -54,7 +54,19 @@ function questionnaireLabel(
 }
 
 export default function Overview() {
-  const { overview } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
+
+  if (data.error || !data.overview) {
+    return (
+      <s-page heading="Overview">
+        <s-banner tone="critical" heading="Couldn't load this page">
+          {data.error?.message ?? "Something went wrong. Try again."}
+        </s-banner>
+      </s-page>
+    );
+  }
+
+  const { overview } = data;
 
   return (
     <s-page heading="Overview">

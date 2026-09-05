@@ -24,9 +24,10 @@ describe("Overview and Settings page handlers", () => {
     const shopDomain = uniqueShop("overview-load");
     await new ShopLifecycleService(prisma).ensureInstalled({ shopDomain });
     const data = await loadOverviewPageData(prisma, { shop: shopDomain });
-    expect(data.overview.shopDomain).toBe(shopDomain);
-    expect(data.overview.processingEnabled).toBe(true);
-    expect(data.overview.installationLabel).toBe("Installed");
+    expect(data.error).toBeNull();
+    expect(data.overview?.shopDomain).toBe(shopDomain);
+    expect(data.overview?.processingEnabled).toBe(true);
+    expect(data.overview?.installationLabel).toBe("Installed");
   });
 
   it("loads settings with missing-scope comparison for the authenticated shop", async () => {
@@ -39,6 +40,10 @@ describe("Overview and Settings page handlers", () => {
         shop: shopDomain,
         scope: "read_customers",
       });
+      expect(data.error).toBeNull();
+      if (data.error) {
+        throw new Error("expected Settings loader success");
+      }
       expect(data.shopDomain).toBe(shopDomain);
       expect(data.requestedScopes).toEqual(["Read customers", "Write customers"]);
       expect(data.grantedScopes).toEqual(["Read customers"]);
@@ -105,6 +110,26 @@ describe("Overview and Settings page handlers", () => {
     expect(result.seed?.ok).toBe(false);
     expect(result.seed?.message).toBe("Something went wrong. Try again.");
     expect(result.seed?.message).not.toMatch(/Prisma|P20\d{2}|sqlite/i);
+  });
+
+  it("sanitizes Overview and Settings loader failures instead of returning Prisma error.message", async () => {
+    const broken = new PrismaClient({
+      datasources: {
+        db: { url: "file:/tmp/segmentiva-missing-db/loader-does-not-exist.sqlite" },
+      },
+    });
+    const shopDomain = uniqueShop("loader-fail");
+    const overview = await loadOverviewPageData(broken, { shop: shopDomain });
+    const settings = await loadSettingsPageData(broken, { shop: shopDomain });
+    await broken.$disconnect();
+
+    expect(overview.error?.message).toBe("Something went wrong. Try again.");
+    expect(overview.overview).toBeNull();
+    expect(JSON.stringify(overview)).not.toMatch(/Prisma|P20\d{2}|sqlite|Timed out/i);
+
+    expect(settings.error?.message).toBe("Something went wrong. Try again.");
+    expect(settings.shopDomain).toBe(shopDomain);
+    expect(JSON.stringify(settings)).not.toMatch(/Prisma|P20\d{2}|sqlite|Timed out/i);
   });
 
   it("runs a diagnostic without persisting unexpected shop identity on mismatch", async () => {
