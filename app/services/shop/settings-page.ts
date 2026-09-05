@@ -87,6 +87,27 @@ export async function handleSettingsAction(
     formData: FormData;
   },
 ): Promise<SettingsActionData> {
+  try {
+    return await handleSettingsActionInner(db, input);
+  } catch (error) {
+    const publicError = toPublicSettingsError(error);
+    return {
+      seed: {
+        ok: false,
+        message: publicError.message,
+      },
+    };
+  }
+}
+
+async function handleSettingsActionInner(
+  db: PrismaClient,
+  input: {
+    session: { shop: string; scope?: string | null };
+    admin: AdminGraphqlClient;
+    formData: FormData;
+  },
+): Promise<SettingsActionData> {
   const shop = verifiedShopFromSession(input.session);
   const lifecycle = new ShopLifecycleService(db);
   const record = await lifecycle.loadOrCreateWithoutReinstall(shop);

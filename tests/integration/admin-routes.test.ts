@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 import { ShopLifecycleService } from "../../app/services/shop/lifecycle";
 import { loadOverviewPageData } from "../../app/services/shop/overview-loader";
@@ -68,13 +68,17 @@ describe("Overview and Settings page handlers", () => {
   });
 
   it("returns a generic message when the database fails after authentication", async () => {
-    const { prisma: isolated } = createMigratedTestDatabase();
-    await isolated.$disconnect();
-    const result = await handleSettingsAction(isolated, {
+    const broken = new PrismaClient({
+      datasources: {
+        db: { url: "file:/tmp/segmentiva-missing-db/does-not-exist.sqlite" },
+      },
+    });
+    const result = await handleSettingsAction(broken, {
       session: { shop: uniqueShop("after-auth-fail") },
       admin: { graphql: async () => new Response("{}", { status: 200 }) },
       formData: form({ intent: "import_pilot", confirm: "yes" }),
     });
+    await broken.$disconnect();
     expect(result.seed?.ok).toBe(false);
     expect(result.seed?.message).toBe("Something went wrong. Try again.");
     expect(result.seed?.message).not.toMatch(/Prisma|P20\d{2}|sqlite/i);

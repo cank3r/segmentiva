@@ -7,8 +7,8 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
-import { processAppUninstalledRequest } from "../../app/routes/webhooks.app.uninstalled";
-import { processAppScopesUpdateRequest } from "../../app/routes/webhooks.app.scopes_update";
+import { processAppUninstalledRequest } from "../../app/webhooks/app-uninstalled";
+import { processAppScopesUpdateRequest } from "../../app/webhooks/app-scopes-update";
 import { ShopLifecycleService } from "../../app/services/shop/lifecycle";
 import { authenticateShopifyWebhook } from "../../app/webhooks/authenticate-webhook";
 import {

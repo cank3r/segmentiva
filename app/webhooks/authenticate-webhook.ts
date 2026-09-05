@@ -1,4 +1,3 @@
-import { authenticate } from "../shopify.server";
 import { safeLog } from "../observability/safe-log";
 import { normalizeShopDomain } from "../tenancy/shop-domain";
 
@@ -59,7 +58,7 @@ export function recoverUninstallContextAfterOfficialAuthFailure(
 
 export async function authenticateShopifyWebhook(
   request: Request,
-  auth: { webhook: (request: Request) => Promise<AuthenticatedWebhookContext> } = authenticate,
+  auth: { webhook: (request: Request) => Promise<AuthenticatedWebhookContext> },
 ): Promise<AuthenticatedWebhookContext> {
   try {
     return await auth.webhook(request);

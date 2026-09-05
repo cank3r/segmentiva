@@ -258,7 +258,8 @@ During normal development the Shopify CLI injects Shopify credentials automatica
 | `npm run seed:pilot` | Explicitly import or reset the Kliquea pilot questionnaire for one shop |
 | `npm run typecheck` | React Router typegen and `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest unit and integration tests |
+| `npm test` | Vitest unit and integration tests (SQLite Prisma client) |
+| `npm run test:postgres` | PostgreSQL validate, migrate, and tenant isolation against a `postgresql://` URL |
 
 ### Pilot questionnaire seed
 
