@@ -105,7 +105,11 @@ try {
   const webhookId = `wh-${shopA}`;
   const result = await uninstall.handleAppUninstalled(
     { shopDomain: shopA },
-    { topic: "APP_UNINSTALLED", webhookId },
+    {
+      topic: "APP_UNINSTALLED",
+      webhookId,
+      triggeredAt: new Date().toISOString(),
+    },
   );
   if (!result.processingStopped) {
     throw new Error("Expected uninstall to stop processing for shop A.");

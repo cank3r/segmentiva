@@ -10,6 +10,7 @@ import {
   settingsFromShopRecord,
   type ShopSettings,
 } from "../services/shop/settings";
+import { fingerprintAccessToken } from "./processed-webhook-repository";
 import { isPrismaUniqueConstraintError } from "./prisma-errors";
 
 export type ShopRecord = Shop;
@@ -31,12 +32,24 @@ export class ShopNotFoundError extends Error {
   }
 }
 
-function isStaleUninstall(triggeredAt: string | undefined, installedAt: Date): boolean {
-  if (!triggeredAt) {
-    return false;
+function parseTriggeredAt(value: string | undefined): Date | null {
+  if (!value) {
+    return null;
   }
-  const triggeredMs = Date.parse(triggeredAt);
-  return !Number.isNaN(triggeredMs) && triggeredMs < installedAt.getTime();
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : new Date(ms);
+}
+
+/**
+ * Fail closed: Shopify webhook deliveries include `X-Shopify-Triggered-At`.
+ * A missing or unparsable timestamp must not uninstall a live INSTALLED shop.
+ * https://shopify.dev/docs/apps/build/webhooks/delivery-structure
+ */
+function isStaleUninstall(triggeredAt: Date | null, installedAt: Date): boolean {
+  if (!triggeredAt) {
+    return true;
+  }
+  return triggeredAt.getTime() < installedAt.getTime();
 }
 
 /**
@@ -122,7 +135,10 @@ export class ShopRepository {
    */
   async applyUninstallIfCurrent(
     shop: VerifiedShopContext,
-    triggeredAt?: string,
+    input: {
+      triggeredAt?: string;
+      claimedInstallGeneration?: number | null;
+    } = {},
   ): Promise<{ record: ShopRecord; applied: boolean; ignoredAsStale: boolean }> {
     const existing = await this.findByVerifiedShop(shop);
 
@@ -134,7 +150,7 @@ export class ShopRepository {
           data: {
             shopDomain: shop.shopDomain,
             installationState: "UNINSTALLED",
-            installedAt: triggeredAt ? new Date(triggeredAt) : now,
+            installedAt: parseTriggeredAt(input.triggeredAt) ?? now,
             uninstalledAt: now,
             installGeneration: 0,
           },
@@ -151,9 +167,23 @@ export class ShopRepository {
     const current = existing ?? (await this.getByVerifiedShop(shop));
 
     if (current.installationState === "UNINSTALLED") {
-      return { record: current, applied: false, ignoredAsStale: false };
+      return {
+        record: current,
+        applied: false,
+        ignoredAsStale:
+          input.claimedInstallGeneration != null &&
+          current.installGeneration !== input.claimedInstallGeneration,
+      };
     }
 
+    if (
+      input.claimedInstallGeneration != null &&
+      current.installGeneration !== input.claimedInstallGeneration
+    ) {
+      return { record: current, applied: false, ignoredAsStale: true };
+    }
+
+    const triggeredAt = parseTriggeredAt(input.triggeredAt);
     if (isStaleUninstall(triggeredAt, current.installedAt)) {
       return { record: current, applied: false, ignoredAsStale: true };
     }
@@ -162,9 +192,10 @@ export class ShopRepository {
       where: {
         shopDomain: shop.shopDomain,
         installationState: "INSTALLED",
-        installedAt: triggeredAt
-          ? { lte: new Date(triggeredAt) }
-          : { lte: new Date() },
+        ...(input.claimedInstallGeneration != null
+          ? { installGeneration: input.claimedInstallGeneration }
+          : {}),
+        ...(triggeredAt ? { installedAt: { lte: triggeredAt } } : {}),
       },
       data: {
         installationState: "UNINSTALLED",
@@ -218,16 +249,33 @@ export class ShopRepository {
   }
 
   /**
-   * Delete sessions that still match the snapshot taken before uninstall.
-   * A reinstall that rotated the access token will not match, so its session stays.
+   * Delete sessions whose id+token hash match the claim-time fingerprints.
+   * A reinstall that rotated the access token will not match.
    */
-  async deleteSessionsMatchingSnapshot(
+  async deleteSessionsMatchingFingerprints(
     shop: VerifiedShopContext,
-    snapshot: Array<{ id: string; accessToken: string }>,
+    fingerprints: Array<{ id: string; fingerprint: string }>,
   ): Promise<number> {
     await this.hooks.failDuringSessionDelete?.();
+    if (fingerprints.length === 0) {
+      return 0;
+    }
+    const sessions = await this.db.session.findMany({
+      where: { shop: shop.shopDomain },
+      select: { id: true, accessToken: true },
+    });
+    const allowed = new Map(
+      fingerprints.map((entry) => [entry.id, entry.fingerprint]),
+    );
     let deleted = 0;
-    for (const session of snapshot) {
+    for (const session of sessions) {
+      const expected = allowed.get(session.id);
+      if (
+        !expected ||
+        fingerprintAccessToken(session.accessToken) !== expected
+      ) {
+        continue;
+      }
       const result = await this.db.session.deleteMany({
         where: {
           id: session.id,

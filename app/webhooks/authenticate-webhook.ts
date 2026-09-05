@@ -15,9 +15,12 @@ const UNINSTALL_TOPICS = new Set(["APP_UNINSTALLED", "app/uninstalled"]);
 /**
  * Official `authenticate.webhook()` validates HMAC first, then tries to refresh
  * an offline session when `expiringOfflineAccessTokens` is enabled.
- * `@shopify/shopify-app-react-router` 1.2.1 (and current mainline 2.x) throws
- * Response 500 when that refresh fails after uninstall/revocation — the handler
- * never runs. HMAC has already succeeded at that point.
+ * `@shopify/shopify-app-react-router` 1.2.1 and published 2.1.0 both call
+ * `ensureValidOfflineSession` after HMAC. When refresh fails because the token
+ * was revoked on uninstall, the library throws Response 500 and the handler
+ * never runs. There is no patched 1.x release, and 2.1.0 is a major template
+ * jump that still performs the same refresh. Shopify's docs still tell apps to
+ * use `authenticate.webhook()` rather than a custom HMAC.
  *
  * This wrapper does not implement HMAC. Invalid HMAC still returns 401 from the
  * official library. Recovery is limited to APP_UNINSTALLED after a 500.
@@ -26,6 +29,8 @@ const UNINSTALL_TOPICS = new Set(["APP_UNINSTALLED", "app/uninstalled"]);
  * - node_modules/@shopify/shopify-app-react-router/dist/esm/server/authenticate/webhooks/authenticate.mjs
  *   (validate HMAC, then ensureValidOfflineSession)
  * - node_modules/@shopify/shopify-app-react-router/dist/esm/server/helpers/ensure-offline-token-is-not-expired.mjs
+ * - unpacked @shopify/shopify-app-react-router@2.1.0 authenticate.mjs (same order)
+ * - https://shopify.dev/docs/apps/build/webhooks/verify-deliveries
  * - https://community.shopify.dev/t/app-uninstalled-and-compliance-webhooks-return-500-after-enabling-expiring-offline-access-tokens/36449
  */
 export function recoverUninstallContextAfterOfficialAuthFailure(

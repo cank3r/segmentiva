@@ -61,8 +61,8 @@ export class ScopesUpdateService {
     const record = await this.lifecycle.load(shop);
     let applied = false;
     if (this.lifecycle.canProcess(record) && input.sessionId && input.scope) {
-      await this.db.session.update({
-        where: { id: input.sessionId },
+      await this.db.session.updateMany({
+        where: { id: input.sessionId, shop: shop.shopDomain },
         data: { scope: input.scope },
       });
       applied = true;

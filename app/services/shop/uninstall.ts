@@ -1,6 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { ProcessedWebhookRepository } from "../../repositories/processed-webhook-repository";
+import {
+  fingerprintAccessToken,
+  ProcessedWebhookRepository,
+} from "../../repositories/processed-webhook-repository";
 import {
   ShopRepository,
   type RepositoryHooks,
@@ -65,24 +68,47 @@ export class UninstallService {
       };
     }
 
+    if (claimed.kind === "process") {
+      const current = await this.lifecycle.load(shop);
+      const sessions = await this.shops.snapshotSessions(shop);
+      await this.webhooks.attachClaimContext(shop, webhook.webhookId, {
+        claimedInstallGeneration: current?.installGeneration ?? 0,
+        claimedTriggeredAt: parseClaimTriggeredAt(webhook.triggeredAt),
+        sessionFingerprints: sessions.map((session) => ({
+          id: session.id,
+          fingerprint: fingerprintAccessToken(session.accessToken),
+        })),
+      });
+    }
+
     if (options.failAt === "after_claim") {
       throw new InjectedUninstallFailure("after_claim");
     }
 
-    const sessionSnapshot = await this.shops.snapshotSessions(shop);
-    const transition = await this.shops.applyUninstallIfCurrent(
+    const claimContext = await this.webhooks.getClaimContext(
       shop,
-      webhook.triggeredAt,
+      webhook.webhookId,
     );
+    const transition = await this.shops.applyUninstallIfCurrent(shop, {
+      triggeredAt:
+        webhook.triggeredAt ?? claimContext.claimedTriggeredAt?.toISOString(),
+      claimedInstallGeneration: claimContext.claimedInstallGeneration,
+    });
 
     if (options.failAt === "after_state_change") {
       throw new InjectedUninstallFailure("after_state_change");
     }
 
     const latestAfterTransition = await this.lifecycle.load(shop);
+    const claimedGeneration = claimContext.claimedInstallGeneration ?? 0;
+    const generationMovedOn =
+      claimedGeneration > 0 &&
+      latestAfterTransition != null &&
+      latestAfterTransition.installGeneration > claimedGeneration;
     const shouldDeleteSessions =
-      latestAfterTransition?.installationState === "UNINSTALLED" &&
-      !transition.ignoredAsStale;
+      generationMovedOn ||
+      (latestAfterTransition?.installationState === "UNINSTALLED" &&
+        !transition.ignoredAsStale);
 
     if (shouldDeleteSessions) {
       const deleteHooks: RepositoryHooks = {
@@ -95,7 +121,10 @@ export class UninstallService {
             : this.hooks.failDuringSessionDelete,
       };
       const deleting = new ShopRepository(this.db, deleteHooks);
-      await deleting.deleteSessionsMatchingSnapshot(shop, sessionSnapshot);
+      await deleting.deleteSessionsMatchingFingerprints(
+        shop,
+        claimContext.sessionFingerprints,
+      );
     }
 
     await this.webhooks.complete(shop, webhook.webhookId);
@@ -107,4 +136,12 @@ export class UninstallService {
       ignoredAsStale: transition.ignoredAsStale,
     };
   }
+}
+
+function parseClaimTriggeredAt(value: string | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : new Date(ms);
 }

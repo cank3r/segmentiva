@@ -74,9 +74,12 @@ model ProcessedWebhook {
   topic       String
   webhookId   String
   status      WebhookDeliveryStatus @default(PENDING)
-  claimedAt   DateTime              @default(now())
-  completedAt DateTime?
-  createdAt   DateTime              @default(now())
+  claimedAt                DateTime              @default(now())
+  completedAt              DateTime?
+  claimedInstallGeneration Int?
+  claimedTriggeredAt       DateTime?
+  sessionFingerprints      Json?
+  createdAt                DateTime              @default(now())
 
   @@unique([shopDomain, webhookId])
   @@index([shopDomain])
